@@ -6,6 +6,9 @@ The pre-word thought — how a mind holds a problem before language exists,
 and the reasoning that moves inside it. That is what nobody has replicated,
 and that is what this is for.
 
+**This is the full engine release.** The conceptual foundation was released
+as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
+
 ## The three layers (as defined)
   Layer 0 — THE SILENT PART. The seed is planted ("when a thought enters
             my head"). The agent, already silent, reasons inside a substrate of

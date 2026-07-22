@@ -2,6 +2,8 @@
 
 I'm releasing "Mobile Build Planner" - but that name doesn't do justice to what it actually is. It's an implementation of something I've been thinking about for a long time: **pre-linguistic reasoning in AI systems**.
 
+**Note**: The conceptual foundation was previously released as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema). This is the full engine release - complete with the Layer 2 incarnation engine (mbp.py, forge.py) that was intentionally withheld from the art release.
+
 ## What is this?
 
 Most AI systems operate at the linguistic layer: they receive prompts, process text, and generate text. This system is different - it has a "silent layer" where reasoning happens **before language exists**.
