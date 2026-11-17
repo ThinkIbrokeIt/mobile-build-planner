@@ -70,7 +70,7 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
                seed, it decides (one operation per turn) what to branch, link,
                retract, hold, name — and when the space is coherent, marks it
                READY. Brains:
-                 --brain openrouter  the model (default slug tencent/hy3:free)
+                 --brain openrouter  the model (default slug nvidia/nemotron-3-ultra-550b-a55b:free)
                                      reasons; falls back to echo on API error.
                  --brain ollama     the model at localhost:11434 reasons;
                                      falls back to echo if unavailable.
@@ -134,7 +134,7 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
 
   # With OpenRouter (requires OPENROUTER_API_KEY environment variable)
   export OPENROUTER_API_KEY=your_key
-  python3 agent.py demo --seed "..." --brain openrouter --model tencent/hy3:free
+  python3 agent.py demo --seed "..." --brain openrouter --model nvidia/nemotron-3-ultra-550b-a55b:free
 
 ## Anti-hallucination
 The map (the agent's reasoning) is the source of truth. mbp verify traces
@@ -144,33 +144,55 @@ the substrate refuses to flesh it — the silence corrects itself before the wor
 ## Is it useful? A benchmark
 `bench.py` tests the one narrow, falsifiable claim: a plain schema agent emits
 structured output but does not hold or surface CONFLICTS between requirements,
-while the substrate does. Each task plants one requirement contradiction and is
-run through both a plain pipeline (requirements -> structured output -> ship)
-and the same output routed through the silent layer.
+while the substrate does. 5 tasks: **3 with a planted contradiction, 2 coherent
+controls** (to catch false positives). The same tasks run through three
+pipelines:
 
-  python3 bench.py          # table
-  python3 bench.py --json   # machine-readable
+  plain      a schema agent: requirements -> structured output -> ship. No
+             representation of conflict.
+  graph      ABLATION: builds the same thought graph (branch/link/name/
+             contradict) but never consults the field and never gates — ships
+             unconditionally. Isolates "having a graph" from "acting on conflict".
+  substrate  full: graph + salience field + gate + execution feedback.
+
+  python3 bench.py                        # table
+  python3 bench.py --json                 # machine-readable
+  python3 bench.py --brain openrouter     # adds a best-effort live-model arm
 
 ```
-task              pipeline    present surfaced incoh_ship shipped verify  exec  ops
-habit-tracker     plain             1        0          1       1      1     1    3
-habit-tracker     substrate         1        1          0       1      1     1   10
-offline-sync      plain             1        0          1       1      1     1    3
-offline-sync      substrate         1        1          0       0      0     0    9
-auth-permissions  plain             1        0          1       1      1     1    3
-auth-permissions  substrate         1        1          0       1      1     1   10
+task              pipeline          present surfaced incoh shipped  fblk verify  exec  ops
+habit-tracker     plain                   1        0     1       1     0      1     1    3
+habit-tracker     graph                   1        0     1       1     0      1     1    9
+habit-tracker     substrate               1        1     0       1     0      1     1   10
+offline-sync      plain                   1        0     1       1     0      1     1    3
+offline-sync      graph                   1        0     1       1     0      1     1    9
+offline-sync      substrate               1        1     0       0     0      0     0    9
+auth-permissions  plain                   1        0     1       1     0      1     1    3
+auth-permissions  graph                   1        0     1       1     0      1     1    9
+auth-permissions  substrate               1        1     0       1     0      1     1   10
+settings-page     plain                   0        0     0       1     0      1     1    3
+settings-page     substrate               0        0     0       1     0      1     1    8
+note-search       plain                   0        0     0       1     0      1     1    3
+note-search       substrate               0        0     0       1     0      1     1    8
 ```
 
-Result: the plain pipeline surfaced **0/3** contradictions and shipped an
-incoherent artifact **3/3** times (and it *verifies* and *runs* — structural
-checks miss semantic incoherence). The substrate surfaced **3/3**, shipped an
-incoherent artifact **0/3**, and blocked the one contradiction with no honest
-resolution. Cost is deliberation steps (10 vs 3), which is the trade.
+Result: **plain and the graph ablation both surfaced 0/3 and shipped incoherent
+work 3/3** times (and it *verifies* and *runs* — structural checks miss semantic
+incoherence). The **substrate surfaced 3/3, shipped incoherent 0/3**, blocked
+the one contradiction with no honest resolution (the other 2 resolved and
+shipped verified, executed artifacts), and raised **0 false blocks** on the
+coherent controls. The `graph` row is the key control: merely structuring
+reasoning as a graph buys nothing — the **gate** is what helps.
 
 Execution feedback closes the loop: a passing run is logged in the substrate's
 `executions` ledger and, via `execution_mass_gain`, reshapes the shipped
 slice's mass (e.g. `1.0 -> 1.3` after a weight-2.0 run), so the field learns
 from what actually ran.
+
+The live arm (`--brain openrouter`) drives `agent.py` with a real model. It is
+best-effort — free-tier models are rate-limited — and it also demonstrates the
+gate against a non-scripted reasoner: one live run reached READY with a slice
+whose dependencies fell outside it, and `forge` refused to incarnate it.
 
 ## MCP — the framing, implemented
 The README once said MCP was an ANALOGY. It is now real: `mcp_server.py` is a

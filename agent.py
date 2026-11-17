@@ -513,7 +513,7 @@ def main():
     p.add_argument("--seed", required=True)
     p.add_argument("--brain", default="openrouter",
                    choices=["ollama", "echo", "openrouter"])
-    p.add_argument("--model", default="tencent/hy3:free")
+    p.add_argument("--model", default="nvidia/nemotron-3-ultra-550b-a55b:free")
     p.add_argument("--max-turns", type=int, default=40)
     args = p.parse_args()
 
