@@ -45,7 +45,8 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUB = os.path.join(HERE, "substrate.py")
 FORGE = os.path.join(HERE, "forge.py")
-PROJECTS = os.path.join(HERE, "projects")
+WORKSPACE = os.environ.get("MBP_WORKSPACE") or HERE   # see substrate.py
+PROJECTS = os.path.join(WORKSPACE, "projects")
 
 # Hermes integration
 HERMES_PATH = os.path.join(HERE, "hermes_dataset.json")

@@ -35,7 +35,10 @@ import sys
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROJECTS = os.path.join(HERE, "projects")
+# Projects live next to the code by default; MBP_WORKSPACE relocates them so the
+# tools also work when installed (site-packages is not writable).
+WORKSPACE = os.environ.get("MBP_WORKSPACE") or HERE
+PROJECTS = os.path.join(WORKSPACE, "projects")
 
 
 def now():

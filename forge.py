@@ -69,7 +69,8 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MBP = os.path.join(HERE, "mbp.py")
-PROJECTS = os.path.join(HERE, "projects")
+WORKSPACE = os.environ.get("MBP_WORKSPACE") or HERE   # see substrate.py
+PROJECTS = os.path.join(WORKSPACE, "projects")
 
 
 def now():

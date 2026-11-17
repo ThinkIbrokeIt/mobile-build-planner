@@ -1,10 +1,48 @@
 # Mobile Build Planner — the silent layer
 =========================================
 
+**What this is:** a **deliberation layer and contradiction gate for AI agents.**
+An agent holds ambiguity and surfaces conflicts between requirements here, and
+the gate refuses to ship incoherent work — then hands a coherent slice to your
+normal output schema. It speaks **MCP**, so any tool-calling host can drive it.
+
+> Most agents execute and remember. They have no place to hold a conflict.
+> This is that place.
+
+## See it in 15 seconds
+```
+python3 mcp_server.py --selftest    # drives the MCP tools end to end, no host needed
+python3 bench.py                    # the gate vs a plain schema agent, 5 tasks
+```
+The benchmark shows a plain schema agent (and a graph-only ablation) surface
+**0/3** requirement contradictions and ship incoherent work **3/3** times; the
+gate surfaces **3/3**, ships incoherent **0/3**, and raises **0 false blocks**
+on coherent controls. See [Is it useful? A benchmark](#is-it-useful-a-benchmark).
+
+## Use it from any MCP host
+The server launches as a command, so any MCP host can run it. Point
+`MBP_WORKSPACE` at a writable directory (defaults to the repo dir):
+```json
+{
+  "mcpServers": {
+    "silent-layer": {
+      "command": "python3",
+      "args": ["/absolute/path/to/mobile-build-planner/mcp_server.py"],
+      "env": { "MBP_WORKSPACE": "/absolute/path/to/your/workspace" }
+    }
+  }
+}
+```
+Then call `substrate_snapshot` to read the salience field and any open
+contradictions, reason with the `substrate_*` tools, and `substrate_commit` a
+coherent slice (it runs forge and returns the verified artifact). A worked
+quickstart is in [`examples/`](examples/); the launch kit is in
+[`docs/launch/`](docs/launch/).
+
+## The idea
 The thing being built is the SILENT PART. Not the scaffold, not the tooling.
 The pre-word thought — how a mind holds a problem before language exists,
-and the reasoning that moves inside it. That is what nobody has replicated,
-and that is what this is for.
+and the reasoning that moves inside it.
 
 **This is the full engine release.** The conceptual foundation was released
 as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
