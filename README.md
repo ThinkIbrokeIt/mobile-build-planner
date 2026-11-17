@@ -91,6 +91,14 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
   mbp.py      The single-layer engine. IDEA->WORD->FLESH with a verify gate.
                Pure Layer 2 now — the output stage.
 
+  mcp_server.py  The substrate AS MCP TOOLS. A dependency-free MCP server
+               (JSON-RPC 2.0 over stdio, stdlib only) so a schema-bound agent
+               can drive deliberation through substrate_* tools, watch the
+               salience field / open contradictions via substrate_snapshot, and
+               commit a coherent slice with substrate_commit (which runs forge
+               and returns the verified artifact). The deliberation layer
+               underneath normal tool-calling agents.
+
 ## Installation
   # Requirements: Python 3.8+, pyyaml
   pip install pyyaml
@@ -133,8 +141,22 @@ The map (the agent's reasoning) is the source of truth. mbp verify traces
 every incarnated file back to a thought. If a slice is circular or incoherent,
 the substrate refuses to flesh it — the silence corrects itself before the word.
 
-## MCP as framing
-MCP is an ANALOGY here, not an implementation — a shared shape so a thought
-and its builder land in the same place: "a space of small operations the agent
-moves through; thoughts leading to thoughts." If that framing fits, good. The
-build is the substrate, not a server.
+## MCP — the framing, implemented
+The README once said MCP was an ANALOGY. It is now real: `mcp_server.py` is a
+dependency-free MCP server (JSON-RPC 2.0 over stdio) that exposes the substrate
+as tools. A schema-bound agent (Claude, an IDE, another agent) drives
+DELIBERATION through `substrate_*` tools, reads the salience field and open
+contradictions via `substrate_snapshot`, then commits with `substrate_commit`
+(Layer 2: forge → real artifact + verification). The substrate is not a rival
+to schema-based agents; it is the deliberation layer underneath them.
+
+  # run as an MCP stdio server (point your host at this command)
+  MBP_ROOT=my-session python3 mcp_server.py
+
+  # or prove it works with no host at all
+  python3 mcp_server.py --selftest
+
+Tools: seed, branch, link, unlink, contradict, resolve, hold, collapse, name,
+ready, release, journal_write, journal_flip, drift, trail, field, types,
+snapshot, commit. Each has a JSON input schema; the substrate still imposes no
+schema on the agent's own thought-types.
