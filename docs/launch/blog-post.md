@@ -49,9 +49,14 @@ Because it's MCP, your existing agent stays your agent. It reasons in the
 substrate when it needs to hold a conflict, then commits a coherent slice to
 your normal output schema.
 
-## The evidence
+## The evidence — two claims, measured separately
 
-`bench.py`, 5 tasks (3 contradiction, 2 coherent controls):
+It's tempting to say "the substrate catches contradictions." That's two claims
+wearing one coat, and only one is hard. So `bench.py` measures them apart.
+
+### Claim 1: gating — given a conflict is recognized, does the gate stop it?
+
+3 tasks with a planted requirement contradiction, 2 coherent controls:
 
 | pipeline | contradictions surfaced | incoherent shipped | false blocks |
 |---|---|---|---|
@@ -63,9 +68,25 @@ The incoherent artifacts from the baseline *verify and execute* — structural
 checks miss semantic incoherence. The ablation shows the gate, not the graph, is
 doing the work.
 
-And with a live model driving `agent.py`, a run reached READY with a slice whose
-dependencies fell outside it; the gate refused it, and auto-resume handed the
-reason back so the model could re-mark a corrected slice.
+### Claim 2: detection — does an agent find conflicts without being told?
+
+3 **external, unlabeled** tasks where the conflict is not pre-marked:
+
+| arm | detected | incoherent shipped when detected |
+|---|---|---|
+| deterministic pipelines (all) | 0/3 | 3/3 |
+| live model, spontaneous | 0/3 | — |
+| live model, prompted to look | 2/3 | **0/3** |
+
+The deterministic pipelines — including this one — cannot detect an unlabeled
+conflict. That's not a bug to hide; it's the boundary of the claim. A live model
+found 2/3 when told to look, and *when it did*, the gate blocked the incoherent
+ship every time. And with a live model driving `agent.py`, a run reached READY
+with a slice whose dependencies fell outside it; the gate refused it, and
+auto-resume handed the reason back so the model could re-mark a corrected slice.
+
+**The honest summary:** the gate does the gating; the model does the detection.
+If you want the first without the second, this is what it looks like.
 
 ## The idea underneath
 
@@ -80,6 +101,8 @@ between thought and word — turns out to be practically useful, not just poetic
 
 - The benchmark is small, and the deterministic pipelines are scripted. Treat the
   numbers as a demonstration of the mechanism, not a leaderboard.
+- Detection is the weak link, and it's the model's, not the layer's. The
+  substrate only helps once a conflict is named.
 - Free-tier models are flaky; the live arm is best-effort.
 - This is an early attempt at a *category*. Whether "deliberation layer" belongs
   next to memory and execution layers is exactly what I want to find out.
@@ -91,4 +114,4 @@ python3 mcp_server.py --selftest
 python3 bench.py
 ```
 
-<repo link>
+https://github.com/ThinkIbrokeIt/mobile-build-planner
