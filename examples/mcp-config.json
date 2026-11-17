@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "silent-layer": {
+      "command": "python3",
+      "args": ["REPLACE/WITH/PATH/TO/mobile-build-planner/mcp_server.py"],
+      "env": {
+        "MBP_WORKSPACE": "REPLACE/WITH/A/WRITABLE/DIR",
+        "MBP_ROOT": "my-session"
+      }
+    }
+  }
+}

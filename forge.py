@@ -60,10 +60,17 @@ import sys
 import shutil
 import yaml
 
+# Sandbox integration
+SANDBOX_AVAILABLE = True
+try:
+    from sandbox import Sandbox, format_execution_result, execution_to_physics_weight
+except ImportError:
+    SANDBOX_AVAILABLE = False
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 MBP = os.path.join(HERE, "mbp.py")
-PROJECTS = os.path.join(HERE, "projects")
-ROOT = os.path.expanduser("~/mobile-build-planner")
+WORKSPACE = os.environ.get("MBP_WORKSPACE") or HERE   # see substrate.py
+PROJECTS = os.path.join(WORKSPACE, "projects")
 
 
 def now():
@@ -391,6 +398,9 @@ def cmd_from_substrate(root, name):
     """LAYER 2 TRANSLATOR. Read the agent's ready slice from the substrate
     and turn it into WORD->FLESH. We do NOT reshape the agent's thoughts:
     its own types and links become the map. We only enforce the gate.
+    
+    Now with sandbox execution: after flesh, execute the code and feed
+    results back to physics for self-training.
     """
     sp = os.path.join(PROJECTS, root, "substrate.yaml")
     if not os.path.exists(sp):
@@ -402,6 +412,25 @@ def cmd_from_substrate(root, name):
         print("[err] agent hasn't marked a ready slice. (substrate ready <ids>)")
         sys.exit(1)
     thoughts = sub["thoughts"]
+
+    # OPEN CONTRADICTIONS ARE FIRST-CLASS: refuse to incarnate a ready slice
+    # while it holds an unresolved, non-dormant tension. A dormant tension was
+    # set aside honestly and does NOT block.
+    try:
+        from physics import open_tensions
+        blocking = [t for t in open_tensions(sub)
+                    if t["a"] in ready and t["b"] in ready]
+    except Exception:
+        blocking = []
+    if blocking:
+        print("DESIGN FLAWS FOUND -- the word cannot become flesh yet:")
+        for t in blocking:
+            print(f"  [manual:tension] {t['a']} <> {t['b']} "
+                  f"(ripen={t['ripen']}) -- unresolved contradiction")
+        print("[BLOCKED] the slice holds an open contradiction. "
+              "Resolve it (substrate resolve) or let it go dormant first.")
+        return
+
     # BOUNDARY ENFORCED HERE: forge (Layer 2) may ONLY read shared journal
     # entries. Private ones (share=0) are the silence's own and never surface
     # into flesh. The choice of whether to share stays with the silence.
@@ -446,13 +475,57 @@ def cmd_from_substrate(root, name):
     print(f"    {len(nodes)} thoughts from the agent's own reasoning")
     write_layer_map(name, wmap, flaws_resolved=True)
     r = subprocess.run([sys.executable, MBP, "flesh", name,
-                        "--platform", "generic"],
+                        "--platform", "python"],
                        cwd=HERE, capture_output=True, text=True)
     print(r.stdout)
-    if "cannot become flesh" in r.stdout or "DESIGN FLAWS" in r.stdout:
+    app_path = os.path.join(PROJECTS, name, "app")
+    if ("cannot become flesh" in r.stdout or "DESIGN FLAWS" in r.stdout
+            or not os.path.isdir(app_path)):
         print("[BLOCKED] the slice isn't coherent yet. Agent should keep reasoning.")
         return
-    print(f"[ok] the agent's reasoning became flesh: projects/{name}/app")
+
+    print(f"[ok] the agent's reasoning became flesh: {app_path}")
+    
+    # SANDBOX EXECUTION: test the incarnation
+    if SANDBOX_AVAILABLE and os.path.exists(app_path):
+        print(f"\n=== SANDBOX: testing incarnation ===")
+        try:
+            with Sandbox() as sb:
+                exec_result = sb.execute_app(app_path)
+                print(format_execution_result(exec_result))
+                
+                # Store execution result for physics feedback
+                exec_metadata_path = os.path.join(PROJECTS, name, "execution.yaml")
+                with open(exec_metadata_path, "w") as f:
+                    yaml.safe_dump(exec_result, f, sort_keys=False)
+                
+                # Calculate physics weight
+                weight = execution_to_physics_weight(exec_result)
+                print(f"  [physics] execution weight: {weight:.2f}")
+                
+                # Feed the outcome back into the substrate (self-training loop):
+                # log it, then physics.recompute reshapes the shipped slice's mass.
+                try:
+                    from physics import record_execution
+                    record_execution(sub, weight,
+                                     success=exec_result.get("success"),
+                                     duration=exec_result.get("duration"),
+                                     errors=exec_result.get("errors"))
+                except Exception:
+                    sub["execution_weight"] = weight
+                if weight < 1.0:
+                    print("  [feedback] execution failed/poor - agent should reconsider")
+                else:
+                    print("  [feedback] execution successful - silence validated")
+                with open(sp, "w") as f:
+                    yaml.safe_dump(sub, f, sort_keys=False)
+        except Exception as e:
+            print(f"  [sandbox error] {e}")
+    else:
+        if not SANDBOX_AVAILABLE:
+            print(f"  [sandbox] not available - skipping execution test")
+        else:
+            print(f"  [sandbox] app path not found - skipping execution test")
 
 
 

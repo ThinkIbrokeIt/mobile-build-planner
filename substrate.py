@@ -35,7 +35,10 @@ import sys
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROJECTS = os.path.join(HERE, "projects")
+# Projects live next to the code by default; MBP_WORKSPACE relocates them so the
+# tools also work when installed (site-packages is not writable).
+WORKSPACE = os.environ.get("MBP_WORKSPACE") or HERE
+PROJECTS = os.path.join(WORKSPACE, "projects")
 
 
 def now():
@@ -56,7 +59,7 @@ def load(root):
 
 def empty():
     return {"seed": None, "thoughts": {}, "trail": [], "ready": [],
-            "field_events": [], "released": []}
+            "field_events": [], "released": [], "types": {}}
 
 
 def _ensure(t):
@@ -207,9 +210,28 @@ def op_name(root, data, tid, ntype):
     if tid not in data["thoughts"]:
         print(f"[err] no thought '{tid}'.")
         return
-    data["thoughts"][tid]["type"] = ntype
-    log(data, "name", f"{tid} is a '{ntype}'")
-    print(f"[name] {tid} -> kind: {ntype}")
+    # The agent invents the type; the registry only dedupes (case/plural/
+    # whitespace) and caps the vocabulary so it can't grow without bound.
+    try:
+        from physics import register_type
+        canonical = register_type(data, ntype)
+    except Exception:
+        canonical = ntype
+    data["thoughts"][tid]["type"] = canonical
+    log(data, "name", f"{tid} is a '{canonical}'")
+    if canonical != ntype:
+        print(f"[name] {tid} -> kind: {canonical}  (from '{ntype}')")
+    else:
+        print(f"[name] {tid} -> kind: {canonical}")
+
+
+def op_types(root, data):
+    """Show the agent's own (now deduped, bounded) kind vocabulary."""
+    try:
+        from physics import types_summary
+        print(types_summary(data))
+    except Exception as e:
+        print(f"[types] registry unavailable: {e}")
 
 
 def op_ready(root, data, ids):
@@ -386,7 +408,7 @@ def main():
     l = sub.add_parser("link"); l.add_argument("a"); l.add_argument("b"); l.add_argument("how", nargs="+")
     ul = sub.add_parser("unlink"); ul.add_argument("a"); ul.add_argument("b"); ul.add_argument("how", nargs="*")
     c = sub.add_parser("contradict"); c.add_argument("a"); c.add_argument("b")
-    r = sub.add_parser("resolve"); r.add_argument("a"); r.add_argument("b"); r.add_argument("how", nargs="+")
+    r = sub.add_parser("resolve"); r.add_argument("a"); r.add_argument("b"); r.add_argument("how", nargs="*")
     h = sub.add_parser("hold"); h.add_argument("a"); h.add_argument("note", nargs="+")
     k = sub.add_parser("collapse"); k.add_argument("a"); k.add_argument("b")
     n = sub.add_parser("name"); n.add_argument("tid"); n.add_argument("ntype")
@@ -395,6 +417,7 @@ def main():
     rl = sub.add_parser("release"); rl.add_argument("tid"); rl.add_argument("note", nargs="*")
     sub.add_parser("field")
     sub.add_parser("drift")
+    sub.add_parser("types")
     jw = sub.add_parser("journal"); js = jw.add_subparsers(dest="jop")
     jwa = js.add_parser("write"); jwa.add_argument("ref"); jwa.add_argument("text", nargs="+")
     jwa.add_argument("--share", action="store_true"); jwa.add_argument("--private", action="store_true")
@@ -419,7 +442,8 @@ def main():
     elif args.op == "contradict":
         op_contradict(args.root, data, args.a, args.b)
     elif args.op == "resolve":
-        op_resolve(args.root, data, args.a, args.b, " ".join(args.how))
+        op_resolve(args.root, data, args.a, args.b,
+                   " ".join(args.how) or "reconciled")
     elif args.op == "hold":
         op_hold(args.root, data, args.a, " ".join(args.note))
     elif args.op == "collapse":
@@ -436,6 +460,8 @@ def main():
         op_field(args.root, data)
     elif args.op == "drift":
         op_drift(args.root, data)
+    elif args.op == "types":
+        op_types(args.root, data)
     elif args.op == "journal":
         if args.jop == "write":
             share = bool(args.share) and not args.private
