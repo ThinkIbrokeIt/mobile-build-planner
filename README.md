@@ -85,18 +85,18 @@ and the reasoning that moves inside it.
 as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
 
 ## The three layers (as defined)
-  Layer 0 — THE SILENT PART. The seed is planted ("when a thought enters
-            my head"). The agent, already silent, reasons inside a substrate of
-            fleeting thoughts that lead to thoughts. It invents its OWN types.
-            No prompt format, no schema. It thinks by acting.
-  Layer 1 — THE THOUGHTS PUT THROUGH REASONING. The agent's silent map,
-            held and reworked (branch, link, contradict, hold, collapse,
+  Layer 0 — THE SILENT PART. *The Seed & The Act.* The seed is planted ("when a
+            thought enters my head"). The agent, already silent, reasons inside
+            a substrate of fleeting thoughts that lead to thoughts. It invents
+            its OWN types. No prompt format, no schema. It thinks by acting.
+  Layer 1 — THE THOUGHTS PUT THROUGH REASONING. *The Weave.* The agent's silent
+            map, held and reworked (branch, link, contradict, hold, collapse,
             retract) until it is coherent. The structure itself refuses to
             linearize if it is circular — self-correction, from within.
-  Layer 2 — THE OUTPUT. Only here do WORD (structured map) and FLESH
-            (incarnated thing) appear. mbp/forge are DEMOTED to this layer:
-            they translate a slice the agent marked READY into buildable output.
-            They enforce the gate. They author nothing.
+  Layer 2 — THE OUTPUT. *The Translation.* Only here do WORD (structured map)
+            and FLESH (incarnated thing) appear. mbp/forge are DEMOTED to this
+            layer: they translate a slice the agent marked READY into buildable
+            output. They enforce the gate. They author nothing.
 
 ## The pieces
   substrate.py  Layer 0/1. A space of operations, not a file we wrote for
