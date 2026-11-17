@@ -39,8 +39,9 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
                  name <id> <type>         agent declares the KIND (invents types).
                  ready <ids...>           agent marks a coherent slice.
                  trail                   show the thought-trail.
-                 field                   show the EMERGENT PHYSICS (see below).
+                 field                   show the SALIENCE FIELD (see below).
                  drift                   one turn of automatic field motion.
+                 types                   show the agent's own kind vocabulary.
                Storage: projects/<root>/substrate.yaml.
 
   physics.py    Layer 0 FIELD. The silence has WEIGHT, not just edits. Every
@@ -50,13 +51,20 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
                  hold       -> rest mass; heavy thoughts resist collapse
                  collapse   -> charge/mass transfer to the absorber
                  link <how> -> same `how` across pairs = RESONANCE (attraction)
-                 name <type>-> same type string across thoughts = KIND-FIELD
+                 name <type>-> same (canonical) type across thoughts = KIND-FIELD
                                (the agent's OWN vocabulary becomes gravity)
-               Proximity is felt, not semantic: shared significant tokens plus
-               relation/type resonance. Tension DRIFT: a held contradiction
-               RIPENS each turn; if the agent never resolves it, it goes
-               DORMANT (set aside, honestly not solved). pull_vector() suggests
-               what the silence leans toward; the agent still disposes.
+               SALIENCE is a single, auditable score per thought built from
+               named signals — conflict, reference, recency, proximity, mass —
+               with every weight in one loggable SalienceConfig (no scattered
+               magic numbers). salience_report() shows the component breakdown.
+               OPEN CONTRADICTIONS ARE FIRST-CLASS: open_tensions() returns the
+               unresolved ones, the field surfaces them, and forge refuses to
+               incarnate a ready slice while an active tension is open. Dormant
+               tensions (set aside honestly) do NOT block. Proximity is felt,
+               not semantic. Tension DRIFT: a held contradiction RIPENS each
+               turn; if the agent never resolves it, it goes DORMANT.
+               pull_vector() suggests what the silence leans toward; the agent
+               still disposes.
 
   agent.py     The silent LOOP. Drives the substrate autonomously. Given the
                seed, it decides (one operation per turn) what to branch, link,
@@ -93,7 +101,7 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
 
 ## Quick Start (No API Key Required)
   # Test with the built-in echo brain (physics-aware, no external service)
-  python3 agent.py demo --seed "build a simple todo app" --brain echo --max-turns 20
+  python3 agent.py demo --seed "build a simple todo app" --brain echo --max-turns 25
 
   # The agent will reason autonomously. When coherent, it marks READY and
   # translates the thought-space into WORD->FLESH. Inspect the reasoning:

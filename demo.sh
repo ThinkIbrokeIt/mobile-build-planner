@@ -17,7 +17,7 @@ rm -rf "projects/$PROJECT"
 rm -rf "projects/${PROJECT}__incarnated"
 
 echo "Planting seed: $SEED"
-python3 agent.py "$PROJECT" --seed "$SEED" --brain echo --max-turns 20
+python3 agent.py "$PROJECT" --seed "$SEED" --brain echo --max-turns 25
 
 echo ""
 echo "=== Inspecting the reasoning ==="

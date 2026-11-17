@@ -24,3 +24,6 @@ Thumbs.db
 # Environment
 .env
 *.env
+
+# Large local data blobs (Hermes history backup; optional, loaded at runtime)
+hermes_dataset.json

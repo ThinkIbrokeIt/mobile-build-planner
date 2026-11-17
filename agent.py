@@ -46,6 +46,10 @@ SUB = os.path.join(HERE, "substrate.py")
 FORGE = os.path.join(HERE, "forge.py")
 PROJECTS = os.path.join(HERE, "projects")
 
+# Hermes integration
+HERMES_PATH = os.path.join(HERE, "hermes_dataset.json")
+HERMES_AVAILABLE = os.path.exists(HERMES_PATH)
+
 
 def sub_path(root):
     return os.path.join(PROJECTS, root, "substrate.yaml")
@@ -149,6 +153,27 @@ def brain_openrouter(model, root, seed, turn):
         field = "\n\n" + field_summary(load_sub(root) or {"thoughts": {}})
     except Exception:
         field = ""
+    
+    # Add Hermes context if available
+    hermes_section = ""
+    if HERMES_AVAILABLE and turn > 3:
+        try:
+            from hermes import get_parser, weight_by_field, format_for_brain
+            parser = get_parser(HERMES_PATH)
+            d = load_sub(root) or {"thoughts": {}}
+            th = d.get("thoughts", {})
+            keywords = []
+            for tid, t in th.items():
+                words = re.findall(r"[A-Za-z]{3,}", t.get("text", "").lower())
+                keywords.extend(words[:5])
+            if keywords:
+                results = parser.query_by_context(keywords[:10], limit=5)
+                if results:
+                    weighted = weight_by_field(results, d)
+                    hermes_section = "\n\n" + format_for_brain(weighted, max_results=2)
+        except Exception:
+            pass
+    
     sys_p = ("You are a silent reasoning agent. You think by issuing ONE "
              "operation per turn into a substrate of fleeting thoughts. You "
              "invent your own thought-types. You avoid dependency cycles. When "
@@ -158,6 +183,7 @@ def brain_openrouter(model, root, seed, turn):
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
+{hermes_section}
 
 Choose ONE operation. Reply ONLY as JSON:
 {{"op": "branch|link|unlink|hold|name|contradict|resolve|collapse|ready|done", "args": "<rest of the line>"}}
@@ -237,12 +263,34 @@ def brain_ollama(model, root, seed, turn):
         field = "\n\n" + field_summary(load_sub(root) or {"thoughts": {}})
     except Exception:
         field = ""
+    
+    # Add Hermes context if available
+    hermes_section = ""
+    if HERMES_AVAILABLE and turn > 3:
+        try:
+            from hermes import get_parser, weight_by_field, format_for_brain
+            parser = get_parser(HERMES_PATH)
+            d = load_sub(root) or {"thoughts": {}}
+            th = d.get("thoughts", {})
+            keywords = []
+            for tid, t in th.items():
+                words = re.findall(r"[A-Za-z]{3,}", t.get("text", "").lower())
+                keywords.extend(words[:5])
+            if keywords:
+                results = parser.query_by_context(keywords[:10], limit=5)
+                if results:
+                    weighted = weight_by_field(results, d)
+                    hermes_section = "\n\n" + format_for_brain(weighted, max_results=2)
+        except Exception:
+            pass
+    
     prompt = f"""You are a silent reasoning agent. A seed thought was planted:
 SEED: {seed}
 
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
+{hermes_section}
 
 Think by issuing ONE operation. Choose from:
   branch <from> <text>     grow a new thought from an existing id
@@ -258,7 +306,6 @@ Think by issuing ONE operation. Choose from:
   journal flip <jid>     change his mind about sharing an entry
   ready <ids...>            your reasoning is coherent; mark a slice for incarnation
   done                       stop without incarnating
-  done                      stop without incarnating
 
 Rules: reason from the seed; let thoughts lead to thoughts; name your OWN types;
 avoid cycles (a thought must not need its own ancestor). When the space is coherent and
@@ -268,7 +315,8 @@ rich, emit ready with the ids worth building. Output ONE JSON object only."""
         "properties": {
             "op": {"type": "string",
                     "enum": ["branch","link","unlink","hold","name",
-                             "contradict","collapse","release","journal","ready","done"]},
+                             "contradict","resolve","collapse","release",
+                             "journal","ready","done"]},
             "args": {"type": "string"},
         },
         "required": ["op"],
@@ -294,7 +342,8 @@ rich, emit ready with the ids worth building. Output ONE JSON object only."""
             op = (data.get("op") or "").strip().lower()
             args = str(data.get("args") or "").strip()
             if op in ("branch","link","unlink","hold","name",
-                      "contradict","collapse","ready","done"):
+                      "contradict","resolve","collapse","release",
+                      "journal","ready","done"):
                 return f"{op} {args}".strip()
             last_err = f"bad op '{op}'"
         except Exception as e:
@@ -306,12 +355,15 @@ rich, emit ready with the ids worth building. Output ONE JSON object only."""
 
 
 def brain_echo(root, seed, turn, mem):
-    """Built-in thought-mover, NOW PHYSICS-AWARE. It does not script an app —
+    """Built-in thought-mover, NOW PHYSICS-AWARE + HERMES-ENABLED. It does not script an app —
     it listens to the field. It reads the emergent pull vector and disposes
     toward what the silence leans toward (a ripened tension, a high-proximity
     fuse, a resonance link, a heavy thought to protect). Only when the field
     is silent does it plant facets off the seed. This exercises the full loop
     honestly: the substrate proposes, the agent (even the fallback) disposes.
+    
+    With Hermes: the agent can retrieve weighted historical context from its
+    own conversation history, creating a self-training loop.
     """
     d = load_sub(root)
     if d is None:
@@ -324,6 +376,32 @@ def brain_echo(root, seed, turn, mem):
         leans = pv.get("leans", [])
     except Exception:
         leans = []
+
+    # Consult Hermes for weighted historical context (self-training)
+    hermes_context = None
+    if HERMES_AVAILABLE and turn > 3:  # Only after some thought has developed
+        try:
+            from hermes import get_parser, weight_by_field, format_for_brain
+            parser = get_parser(HERMES_PATH)
+            
+            # Extract keywords from current thoughts for context search
+            th = d.get("thoughts", {})
+            keywords = []
+            for tid, t in th.items():
+                words = re.findall(r"[A-Za-z]{3,}", t.get("text", "").lower())
+                keywords.extend(words[:5])  # Top 5 words per thought
+            
+            # Query Hermes and weight by field state
+            if keywords:
+                results = parser.query_by_context(keywords[:10], limit=5)
+                if results:
+                    weighted = weight_by_field(results, d)
+                    hermes_context = format_for_brain(weighted, max_results=2)
+                    # Store in memory for potential use
+                    mem["hermes_context"] = hermes_context
+        except Exception as e:
+            # Hermes is optional — fail silently
+            pass
 
     if leans:
         # dispose toward the strongest lean the field offered; cycle through
@@ -505,9 +583,13 @@ def main():
                 a, b = rest.split()
                 print(run_sub(args.root, "contradict", a, b))
             elif cmd == "resolve":
-                m = re.match(r"(\S+) (\S+) (.+)", rest)
-                if m:
+                # `how` is optional: the field's lean emits "resolve a b" with
+                # no reconciliation note, and that must still close the tension.
+                m = re.match(r"(\S+) (\S+)(?: (.+))?", rest)
+                if m and m.group(3):
                     print(run_sub(args.root, "resolve", m.group(1), m.group(2), *m.group(3).split()))
+                elif m:
+                    print(run_sub(args.root, "resolve", m.group(1), m.group(2)))
             elif cmd == "collapse":
                 a, b = rest.split()
                 print(run_sub(args.root, "collapse", a, b))
