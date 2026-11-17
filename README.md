@@ -221,59 +221,62 @@ every incarnated file back to a thought. If a slice is circular or incoherent,
 the substrate refuses to flesh it — the silence corrects itself before the word.
 
 ## Is it useful? A benchmark
-`bench.py` tests the one narrow, falsifiable claim: a plain schema agent emits
-structured output but does not hold or surface CONFLICTS between requirements,
-while the substrate does. 5 tasks: **3 with a planted contradiction, 2 coherent
-controls** (to catch false positives). The same tasks run through three
-pipelines:
+`bench.py` tests **two separate claims**, so neither can hide behind the other:
 
-  plain      a schema agent: requirements -> structured output -> ship. No
-             representation of conflict.
-  graph      ABLATION: builds the same thought graph (branch/link/name/
-             contradict) but never consults the field and never gates — ships
-             unconditionally. Isolates "having a graph" from "acting on conflict".
-  substrate  full: graph + salience field + gate + execution feedback.
+- **GATING** — given a conflict is *recognized*, the substrate surfaces it as a
+  first-class object and refuses to ship while it is open. Deterministic
+  pipelines measure this.
+- **DETECTION** — a reasoner *discovers* the conflict from realistic requirements
+  in the first place. This needs a model; the substrate gates, it does not
+  detect. Measured by a live-model arm on **external** tasks whose conflict is
+  real but **unlabeled**.
 
-  python3 bench.py                        # table
-  python3 bench.py --json                 # machine-readable
-  python3 bench.py --brain openrouter     # adds a best-effort live-model arm
+Task kinds: `planted` (3 — the pipeline is *told* about the conflict),
+`control` (2 — coherent, false-positive check), `external` (3 — realistic
+requirements, conflict unlabeled). Pipelines: `plain` (schema agent), `graph`
+(ABLATION: same thought graph, no field consulted, no gate), `substrate`
+(graph + salience field + gate + execution feedback).
 
 ```
-task              pipeline          present surfaced incoh shipped  fblk verify  exec  ops
-habit-tracker     plain                   1        0     1       1     0      1     1    3
-habit-tracker     graph                   1        0     1       1     0      1     1    9
-habit-tracker     substrate               1        1     0       1     0      1     1   10
-offline-sync      plain                   1        0     1       1     0      1     1    3
-offline-sync      graph                   1        0     1       1     0      1     1    9
-offline-sync      substrate               1        1     0       0     0      0     0    9
-auth-permissions  plain                   1        0     1       1     0      1     1    3
-auth-permissions  graph                   1        0     1       1     0      1     1    9
-auth-permissions  substrate               1        1     0       1     0      1     1   10
-settings-page     plain                   0        0     0       1     0      1     1    3
-settings-page     substrate               0        0     0       1     0      1     1    8
-note-search       plain                   0        0     0       1     0      1     1    3
-note-search       substrate               0        0     0       1     0      1     1    8
+python3 bench.py
+python3 bench.py --brain openrouter --live-scope external --live-nudge
 ```
 
-Result: **plain and the graph ablation both surfaced 0/3 and shipped incoherent
-work 3/3** times (and it *verifies* and *runs* — structural checks miss semantic
-incoherence). The **substrate surfaced 3/3, shipped incoherent 0/3**, blocked
-the one contradiction with no honest resolution (the other 2 resolved and
-shipped verified, executed artifacts), and raised **0 false blocks** on the
-coherent controls. The `graph` row is the key control: merely structuring
-reasoning as a graph buys nothing — the **gate** is what helps.
+**GATING** (planted + controls):
+```
+pipeline           surfaced  incoh_shipped  false_block
+plain                  0/3           3/3         0/2
+graph                  0/3           3/3         0/2
+substrate              3/3           0/3         0/2
+```
+
+**DETECTION** (external; conflict unlabeled):
+```
+pipeline               detected  incoh_shipped
+plain                     0/3           3/3
+graph                     0/3           3/3
+substrate                 0/3           3/3
+live:openrouter           0/3           2/3     # spontaneous
+live:openrouter+nudge     2/3           0/3     # prompted to look for conflicts
+```
+
+Read honestly. **The gate is the product:** on recognized conflicts it surfaces
+3/3 and never ships incoherent work, with **0 false blocks** on controls — and
+the `graph` ablation proves it is the gate, not the graph, doing the work. But
+the gate only fires on conflicts that are *recognized*: on unlabeled tasks no
+deterministic pipeline detects anything, a free model noticed **0/3**
+spontaneously and **2/3** when prompted — and in every case where it did, the
+substrate prevented the incoherent ship (**0/3**). Detection is the agent's job;
+holding and gating is the substrate's.
 
 Execution feedback closes the loop: a passing run is logged in the substrate's
 `executions` ledger and, via `execution_mass_gain`, reshapes the shipped
-slice's mass (e.g. `1.0 -> 1.3` after a weight-2.0 run), so the field learns
-from what actually ran.
+slice's mass (e.g. `1.0 -> 1.3` after a weight-2.0 run).
 
-The live arm (`--brain openrouter`) drives `agent.py` with a real model. It is
-best-effort — free-tier models are rate-limited. It also demonstrates the gate
-against a non-scripted reasoner: one live run reached READY with a slice whose
-dependencies fell outside it and `forge` refused it; with auto-resume
-(`--max-attempts`) the loop hands the reason back to the model to re-mark a
-corrected slice.
+The live arm is best-effort (free-tier models are rate-limited) and also
+demonstrates the gate against a non-scripted reasoner: a live run reached READY
+with a slice whose dependencies fell outside it and `forge` refused it; with
+auto-resume (`--max-attempts`) the loop hands the reason back to the model.
 
 ## MCP — the framing, implemented
 The README once said MCP was an ANALOGY. It is now real: `mcp_server.py` is a

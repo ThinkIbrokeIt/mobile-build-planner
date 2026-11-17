@@ -144,7 +144,7 @@ def _load_openrouter_key():
     return ""
 
 
-def brain_openrouter(model, root, seed, turn, correction=""):
+def brain_openrouter(model, root, seed, turn, correction="", nudge=""):
     import urllib.request, json
     key = _load_openrouter_key()
     if not key:
@@ -185,7 +185,7 @@ def brain_openrouter(model, root, seed, turn, correction=""):
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
-{hermes_section}{correction_block(correction)}
+{hermes_section}{correction_block(correction)}{nudge}
 
 Choose ONE operation. Reply ONLY as JSON:
 {{"op": "branch|link|unlink|hold|name|contradict|resolve|collapse|ready|done", "args": "<rest of the line>"}}
@@ -257,7 +257,7 @@ rich, emit ready with the ids worth building. Output ONE JSON object only."""
     except Exception as e:
         last_err = str(e)
     return f"__ERROR__ {last_err}"
-def brain_ollama(model, root, seed, turn, correction=""):
+def brain_ollama(model, root, seed, turn, correction="", nudge=""):
     import urllib.request, json
     ctx = trail_text(root)
     try:
@@ -292,7 +292,7 @@ SEED: {seed}
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
-{hermes_section}{correction_block(correction)}
+{hermes_section}{correction_block(correction)}{nudge}
 
 Think by issuing ONE operation. Choose from:
   branch <from> <text>     grow a new thought from an existing id
@@ -571,6 +571,9 @@ def main():
     p.add_argument("--max-attempts", type=int, default=3,
                    help="how many times the gate may REFUSE a ready slice before "
                         "the loop stops; each refusal is fed back to the brain")
+    p.add_argument("--detect-nudge", action="store_true",
+                   help="tell the model to actively look for contradictions "
+                        "(for the benchmark's prompted-detection arm)")
     args = p.parse_args()
 
     # plant the seed (idempotent-ish: only if no substrate yet)
@@ -583,15 +586,19 @@ def main():
     mem = {}
     attempt = 0      # times forge has refused a ready slice
     correction = ""  # gate feedback fed back to a model brain
+    nudge = ("\n\nAlso: actively look for thoughts that CONTRADICT each other. "
+             "When two requirements fight, record it with `contradict`, then "
+             "`resolve` it (say how they reconcile) or `release` it."
+             if args.detect_nudge else "")
     for turn in range(1, args.max_turns + 1):
         if args.brain == "ollama":
-            op = brain_ollama(args.model, args.root, args.seed, turn, correction)
+            op = brain_ollama(args.model, args.root, args.seed, turn, correction, nudge)
             if op.startswith("__ERROR__"):
                 print(f"[brain] ollama unavailable ({op}); switching to echo.")
                 args.brain = "echo"
                 op = brain_echo(args.root, args.seed, turn, mem)
         elif args.brain == "openrouter":
-            op = brain_openrouter(args.model, args.root, args.seed, turn, correction)
+            op = brain_openrouter(args.model, args.root, args.seed, turn, correction, nudge)
             if op.startswith("__ERROR__"):
                 print(f"[brain] openrouter failed ({op}); switching to echo.")
                 args.brain = "echo"

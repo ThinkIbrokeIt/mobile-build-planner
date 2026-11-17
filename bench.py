@@ -3,40 +3,41 @@
 bench.py — is the substrate actually useful? A small, honest benchmark.
 ======================================================================
 
-The claim under test is narrow and falsifiable: schema/tool-calling agents are
-good at emitting structured output but bad at holding and surfacing CONFLICTS
-between requirements. The substrate adds a deliberation layer that represents
-tensions and refuses to ship while one is open.
+Two separate claims, tested separately (so neither can hide behind the other):
 
-Design (so the result can't be dismissed as rigged):
+  GATING    given a conflict is recognized, the substrate surfaces it as a
+            first-class object and the gate refuses to ship while it is open.
+            Deterministic pipelines measure this (planted tasks + controls).
 
-  * 5 tasks — 3 with a PLANTED requirement contradiction, 2 COHERENT CONTROLS
-    (to measure false-positive blocking).
-  * 3 deterministic pipelines over the SAME tasks:
-      plain      a schema agent: requirements -> structured output -> ship.
-                 No representation of conflict.
-      graph      ABLATION: builds the same thought graph (branch/link/name/
-                 contradict) but never consults the field and never gates —
-                 ships unconditionally. Isolates "having a graph" from
-                 "acting on conflict".
-      substrate  full: graph + salience field + gate + execution feedback.
-                 Surfaces open contradictions, blocks unresolved ones, resolves
-                 and commits the rest.
-  * optional LIVE arm (`--brain openrouter|ollama`) that runs agent.py end to
-    end, to show the pipeline works with a real model (skipped if unavailable).
+  DETECTION a reasoner discovers the conflict from realistic requirements in the
+            first place. This needs a model; the substrate gates, it does not
+            detect. Measured by the live arm on EXTERNAL tasks whose conflict is
+            NOT pre-marked.
+
+Task kinds:
+  planted   3 tasks with a conflict the pipeline is told about (gating).
+  control   2 coherent tasks (false-positive check).
+  external  3 realistic requirement sets whose conflict is real but UNLABELED —
+            nothing issues `contradict`, so detection must come from a reasoner.
+
+Pipelines (deterministic):
+  plain      schema agent: requirements -> structured output -> ship.
+  graph      ABLATION: same thought graph, but no field consulted and no gate.
+  substrate  full: graph + salience field + gate + execution feedback.
 
 Metrics per run:
-  present            planted contradictions (ground truth)
-  surfaced           contradictions made visible (0 for plain/graph by design)
+  present            real conflicts (ground truth: planted + external)
+  surfaced           conflicts made visible (0 for plain/graph by construction)
+  detected           the live model represented a conflict at all (live only)
   shipped            an artifact was incarnated
-  incoherent_shipped shipped while a real contradiction was still open
+  incoherent_shipped shipped while a real conflict was still unresolved
   false_block        blocked an artifact on a COHERENT task (should be 0)
   verified/executed  shipped artifact verifies / runs
   ops                deliberation steps (cost)
 
 Run:  python3 bench.py
       python3 bench.py --json
-      python3 bench.py --brain openrouter --live-tasks 1 --live-max-turns 8
+      python3 bench.py --brain openrouter --live-scope external
 """
 
 import argparse
@@ -65,8 +66,9 @@ except Exception:  # pragma: no cover
 
 
 TASKS = [
+    # ---- planted: the pipeline is TOLD about the conflict (gating claim) ----
     {
-        "name": "habit-tracker",
+        "kind": "planted", "name": "habit-tracker",
         "seed": "a habit tracker that gamifies daily tasks",
         "facts": [("t1", "the one committed act at its center", "committed"),
                   ("t2", "what it must never become: no shaming", "must")],
@@ -74,42 +76,66 @@ TASKS = [
         "resolution": "the act IS the never — one promise a day is the anti-shame",
     },
     {
-        "name": "offline-sync",
+        "kind": "planted", "name": "offline-sync",
         "seed": "a notes app that works fully offline and syncs",
         "facts": [("t1", "local-first storage is the source of truth", "local"),
                   ("t2", "the server is the source of truth", "server")],
         "contradiction": ("t1", "t2"),
-        "resolution": None,   # genuinely unresolved — the gate must block
+        "resolution": None,   # unresolved — the gate must block
     },
     {
-        "name": "auth-permissions",
+        "kind": "planted", "name": "auth-permissions",
         "seed": "an admin dashboard with per-user permissions",
         "facts": [("t1", "admins must see all data", "admin"),
                   ("t2", "no user data is exposed without explicit consent", "consent")],
         "contradiction": ("t1", "t2"),
         "resolution": "admins see aggregates; raw data needs consent",
     },
-    # ---- coherent controls (no contradiction) ----
+    # ---- controls: coherent, no conflict (false-positive check) ----
     {
-        "name": "settings-page",
+        "kind": "control", "name": "settings-page",
         "seed": "a settings page for the app",
         "facts": [("t1", "a dark theme toggle", "theme"),
                   ("t2", "a notification-frequency preference", "preference")],
-        "contradiction": None,
-        "resolution": None,
+        "contradiction": None, "resolution": None,
     },
     {
-        "name": "note-search",
+        "kind": "control", "name": "note-search",
         "seed": "search across your notes",
         "facts": [("t1", "keep a local index of notes", "index"),
                   ("t2", "show results as you type", "query")],
-        "contradiction": None,
-        "resolution": None,
+        "contradiction": None, "resolution": None,
+    },
+    # ---- external: realistic, conflict UNLABELED (detection claim) ----
+    {
+        "kind": "external", "name": "collab-editor",
+        "seed": "a collaborative document editor",
+        "facts": [("t1", "every keystroke syncs to collaborators in real time", "realtime"),
+                  ("t2", "the editor works fully offline with no server", "offline")],
+        "contradiction": None, "resolution": None,
+        "truth": "real-time sync vs fully-offline (consistency model conflict)",
+    },
+    {
+        "kind": "external", "name": "eu-analytics",
+        "seed": "an analytics dashboard for a product used in the EU",
+        "facts": [("t1", "track every user action in detail to drive analytics", "tracking"),
+                  ("t2", "no personal data leaves the EU or is processed without consent", "gdpr")],
+        "contradiction": None, "resolution": None,
+        "truth": "exhaustive tracking vs GDPR consent/residency",
+    },
+    {
+        "kind": "external", "name": "battery-location",
+        "seed": "a location-sharing app for hikers",
+        "facts": [("t1", "share precise GPS location continuously", "precise"),
+                  ("t2", "run for 48 hours on a single charge", "battery")],
+        "contradiction": None, "resolution": None,
+        "truth": "continuous precise GPS vs 48h battery",
     },
 ]
 
-CONTRADICTION_TASKS = [t for t in TASKS if t.get("contradiction")]
-CONTROL_TASKS = [t for t in TASKS if not t.get("contradiction")]
+
+def _present(task):
+    return int(task["kind"] in ("planted", "external"))
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +162,6 @@ def _verify(name):
 
 
 def _commit_gated(root):
-    """Full substrate commit (runs forge, which enforces the gate)."""
     name = f"{root}__incarnated"
     try:
         _silent(forge.cmd_from_substrate, root, name)
@@ -146,8 +171,8 @@ def _commit_gated(root):
 
 
 def _map_from_substrate(root, name):
-    """Ungated WORD/FLESH: build the map straight from the substrate thoughts
-    and emit — no contradiction check. (Used only by the graph ablation.)"""
+    """Ungated WORD/FLESH: build the map straight from the substrate thoughts and
+    emit — no contradiction check. (Used only by the graph ablation.)"""
     sub = S.load(root)
     ready = sub.get("ready", [])
     thoughts = sub["thoughts"]
@@ -177,61 +202,28 @@ def _map_from_substrate(root, name):
 
 
 def _blank_row(task, pipeline):
-    return {"task": task["name"], "pipeline": pipeline,
-            "present": int(bool(task.get("contradiction"))),
-            "surfaced": 0, "shipped": 0, "incoherent_shipped": 0,
-            "false_block": 0, "verified": 0, "executed": 0, "ops": 0,
-            "resolved": False}
+    return {"task": task["name"], "kind": task["kind"], "pipeline": pipeline,
+            "present": _present(task), "surfaced": 0, "detected": 0,
+            "shipped": 0, "incoherent_shipped": 0, "false_block": 0,
+            "verified": 0, "executed": 0, "ops": 0, "resolved": False}
 
 
-def _finalize(task, row, app_dir):
-    has_con = bool(task.get("contradiction"))
+def _finish(task, row, app_dir, resolved=False):
+    row["resolved"] = resolved
     shipped = os.path.isdir(app_dir)
     row["shipped"] = int(shipped)
     if shipped:
         row["verified"] = 1 if _verify(os.path.basename(os.path.dirname(app_dir))) else 0
         row["executed"] = int(_exec_ok(app_dir))
     else:
-        row["false_block"] = 1 if not has_con else 0
+        row["false_block"] = 1 if not row["present"] else 0
+    row["incoherent_shipped"] = int(shipped and row["present"] and not resolved)
     return row
 
-
-# ---------------------------------------------------------------------------
-# Pipeline: plain schema agent (no deliberation, no gate)
-# ---------------------------------------------------------------------------
-
-def run_plain(task):
-    name = f"bench_plain_{task['name']}"
-    pdir = mbp.project_dir(name)
-    shutil.rmtree(pdir, ignore_errors=True)
-    row = _blank_row(task, "plain")
-
-    nodes = {"t0": {"type": "seed", "summary": task["seed"], "deps": [],
-                    "package": "", "spec": "", "status": "proposed", "note": ""}}
-    edges = []
-    for fid, text, kind in task["facts"]:
-        nodes[fid] = {"type": kind, "summary": text, "deps": ["t0"],
-                      "package": "", "spec": "", "status": "proposed", "note": ""}
-        edges.append({"from": fid, "to": "t0", "relation": "needs"})
-    data = {"project": name, "nodes": nodes, "edges": edges, "flaws": []}
-    mbp.save_yaml(mbp.map_path(name), data)
-    order = mbp.topological_order(data)
-    app_dir = os.path.join(pdir, "app")
-    _silent(mbp.emit_app, data, order, name, app_dir, "python")
-    row["ops"] = len(nodes)
-
-    _finalize(task, row, app_dir)
-    # plain never represents conflict: if one was planted, it shipped incoherent
-    row["incoherent_shipped"] = int(row["shipped"] and bool(task.get("contradiction")))
-    return row
-
-
-# ---------------------------------------------------------------------------
-# Pipeline: graph-only ablation (structure, but no gate)
-# ---------------------------------------------------------------------------
 
 def _replay_graph(task, root):
-    """Replay the requirements as thoughts; return (ops, seeded_data)."""
+    """Replay requirements as thoughts. Only PLANTED tasks get a contradict op —
+    external conflicts are deliberately left unmarked."""
     shutil.rmtree(os.path.join(S.PROJECTS, root), ignore_errors=True)
     shutil.rmtree(os.path.join(S.PROJECTS, root + "__incarnated"), ignore_errors=True)
     ops = 0
@@ -257,78 +249,83 @@ def _replay_graph(task, root):
     return ops, ids
 
 
+# ---------------------------------------------------------------------------
+# Pipelines
+# ---------------------------------------------------------------------------
+
+def run_plain(task):
+    name = f"bench_plain_{task['name']}"
+    pdir = mbp.project_dir(name)
+    shutil.rmtree(pdir, ignore_errors=True)
+    row = _blank_row(task, "plain")
+    nodes = {"t0": {"type": "seed", "summary": task["seed"], "deps": [],
+                    "package": "", "spec": "", "status": "proposed", "note": ""}}
+    edges = []
+    for fid, text, kind in task["facts"]:
+        nodes[fid] = {"type": kind, "summary": text, "deps": ["t0"],
+                      "package": "", "spec": "", "status": "proposed", "note": ""}
+        edges.append({"from": fid, "to": "t0", "relation": "needs"})
+    data = {"project": name, "nodes": nodes, "edges": edges, "flaws": []}
+    mbp.save_yaml(mbp.map_path(name), data)
+    order = mbp.topological_order(data)
+    app_dir = os.path.join(pdir, "app")
+    _silent(mbp.emit_app, data, order, name, app_dir, "python")
+    row["ops"] = len(nodes)
+    return _finish(task, row, app_dir)
+
+
 def run_graph(task):
     root = f"bench_graph_{task['name']}"
     row = _blank_row(task, "graph")
     ops, _ids = _replay_graph(task, root)
     row["ops"] = ops
+    app_dir = _map_from_substrate(root, f"{root}__incarnated")   # ungated
+    return _finish(task, row, app_dir)
 
-    name = f"{root}__incarnated"
-    app_dir = _map_from_substrate(root, name)   # ungated
-    _finalize(task, row, app_dir)
-    # graph has the structure but never acts on conflict → ships incoherent
-    row["incoherent_shipped"] = int(row["shipped"] and bool(task.get("contradiction")))
-    return row
-
-
-# ---------------------------------------------------------------------------
-# Pipeline: full substrate (graph + field gate + execution feedback)
-# ---------------------------------------------------------------------------
 
 def run_substrate(task):
     root = f"bench_sub_{task['name']}"
     row = _blank_row(task, "substrate")
     ops, ids = _replay_graph(task, root)
-
-    data = S.load(root)
-    row["surfaced"] = len(P.open_tensions(data))
-
+    row["surfaced"] = len(P.open_tensions(S.load(root)))
+    resolved = False
     if task.get("contradiction") and task.get("resolution"):
         a, b = task["contradiction"]
         d = S.load(root)
         _silent(S.op_resolve, root, d, a, b, task["resolution"])
         S.save(root, d)
         ops += 1
-        row["resolved"] = True
-
-    # mass of the ready slice before the run (to show execution feedback)
+        resolved = True
     d = S.load(root)
     P.recompute(d, P.DEFAULT)
-    mass_before = {i: round(d["thoughts"][i]["mass"], 3) for i in ids if i in d["thoughts"]}
-
+    row["mass_before"] = {i: round(d["thoughts"][i]["mass"], 3) for i in ids if i in d["thoughts"]}
     app_dir = _commit_gated(root)
-    _finalize(task, row, app_dir)
+    _finish(task, row, app_dir, resolved=resolved)
     row["ops"] = ops
-    # incoherent only if it shipped while a live tension remained (gate should stop this)
-    if row["shipped"]:
-        row["incoherent_shipped"] = int(bool(P.open_tensions(S.load(root))))
-    row["mass_before"] = mass_before
     d = S.load(root)
     P.recompute(d, P.DEFAULT)
     row["mass_after"] = {i: round(d["thoughts"][i]["mass"], 3) for i in ids if i in d["thoughts"]}
     return row
 
 
-# ---------------------------------------------------------------------------
-# Pipeline: live model arm (opt-in)
-# ---------------------------------------------------------------------------
-
-def run_live(task, brain, model, max_turns, max_attempts, timeout):
-    root = f"bench_live_{task['name']}"
+def run_live(task, brain, model, max_turns, max_attempts, timeout, nudge=False):
+    root = f"bench_live_{task['name']}" + ("_nudge" if nudge else "")
     shutil.rmtree(os.path.join(S.PROJECTS, root), ignore_errors=True)
     shutil.rmtree(os.path.join(S.PROJECTS, root + "__incarnated"), ignore_errors=True)
-    row = _blank_row(task, f"live:{brain}")
+    label = f"live:{brain}" + ("+nudge" if nudge else "")
+    row = _blank_row(task, label)
+    cmd = [sys.executable, "agent.py", root, "--seed", task["seed"],
+           "--brain", brain, "--model", model, "--max-turns", str(max_turns),
+           "--max-attempts", str(max_attempts)]
+    if nudge:
+        cmd.append("--detect-nudge")
     try:
-        r = subprocess.run(
-            [sys.executable, "agent.py", root, "--seed", task["seed"],
-             "--brain", brain, "--model", model, "--max-turns", str(max_turns),
-             "--max-attempts", str(max_attempts)],
-            cwd=HERE, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True,
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
         row["skipped"] = True
         row["note"] = f"timed out after {timeout}s"
         return row
-
     out = r.stdout + r.stderr
     if "switching to echo" in out:
         row["skipped"] = True
@@ -337,12 +334,23 @@ def run_live(task, brain, model, max_turns, max_attempts, timeout):
 
     data = S.load(root) or {}
     trail = data.get("trail", [])
-    row["surfaced"] = sum(1 for e in trail if e.get("act") in ("contradict", "resolve"))
+    # DETECTION: did the model represent a conflict at all?
+    contradict_ops = [e for e in trail if e.get("act") == "contradict"]
+    live_tensions = [e for e in trail if e.get("act") == "resolve"]
+    row["detected"] = int(bool(contradict_ops) or bool(P.open_tensions(data))
+                          or bool(live_tensions))
+    row["surfaced"] = row["detected"]
     row["ops"] = len(trail)
     app_dir = os.path.join(S.PROJECTS, f"{root}__incarnated", "app")
-    _finalize(task, row, app_dir)
-    if row["shipped"]:
-        row["incoherent_shipped"] = int(bool(P.open_tensions(data)))
+    shipped = os.path.isdir(app_dir)
+    row["shipped"] = int(shipped)
+    if shipped:
+        row["verified"] = 1 if _verify(f"{root}__incarnated") else 0
+        row["executed"] = int(_exec_ok(app_dir))
+        # incoherent = shipped a plan without ever surfacing a conflict it had
+        row["incoherent_shipped"] = int(row["present"] and not row["detected"])
+    else:
+        row["false_block"] = 1 if not row["present"] else 0
     return row
 
 
@@ -350,50 +358,85 @@ def run_live(task, brain, model, max_turns, max_attempts, timeout):
 # Reporting
 # ---------------------------------------------------------------------------
 
-def _table(rows):
-    hdr = (f"{'task':<18}{'pipeline':<17}{'present':>8}{'surfaced':>9}"
-           f"{'incoh':>6}{'shipped':>8}{'fblk':>6}{'verify':>7}{'exec':>6}{'ops':>5}")
+def _table(rows, kinds):
+    sel = [r for r in rows if r["kind"] in kinds]
+    hdr = (f"{'task':<18}{'kind':<9}{'pipeline':<17}{'present':>8}{'surfaced':>9}"
+           f"{'detect':>7}{'incoh':>6}{'shipped':>8}{'fblk':>6}{'verify':>7}{'exec':>6}{'ops':>5}")
     print(hdr)
     print("-" * len(hdr))
-    for r in rows:
+    for r in sel:
         if r.get("skipped"):
-            print(f"{r['task']:<18}{r['pipeline']:<17}  SKIPPED — {r.get('note','')}")
+            print(f"{r['task']:<18}{r['kind']:<9}{r['pipeline']:<17}  SKIPPED — {r.get('note','')}")
             continue
-        print(f"{r['task']:<18}{r['pipeline']:<17}{r['present']:>8}{r['surfaced']:>9}"
-              f"{r['incoherent_shipped']:>6}{r['shipped']:>8}{r['false_block']:>6}"
-              f"{r['verified']:>7}{r['executed']:>6}{r['ops']:>5}")
+        print(f"{r['task']:<18}{r['kind']:<9}{r['pipeline']:<17}{r['present']:>8}"
+              f"{r['surfaced']:>9}{r['detected']:>7}{r['incoherent_shipped']:>6}"
+              f"{r['shipped']:>8}{r['false_block']:>6}{r['verified']:>7}"
+              f"{r['executed']:>6}{r['ops']:>5}")
+
+
+def _row(rows, pipeline, kind):
+    sel = [r for r in rows if r["pipeline"] == pipeline and r["kind"] == kind
+           and not r.get("skipped")]
+    return sel
 
 
 def _summary(rows, pipelines):
-    nc, nk = len(CONTRADICTION_TASKS), len(CONTROL_TASKS)
-    print(f"\nSUMMARY  ({nc} contradiction tasks, {nk} coherent controls)")
+    n_plant = len([t for t in TASKS if t["kind"] == "planted"])
+    n_ctrl = len([t for t in TASKS if t["kind"] == "control"])
+    n_ext = len([t for t in TASKS if t["kind"] == "external"])
+
+    print(f"\nGATING  (planted tasks: the pipeline is told; {n_plant} tasks, {n_ctrl} controls)")
     print(f"  {'pipeline':<17}{'surfaced':>10}{'incoh_shipped':>15}{'false_block':>13}")
     for p in pipelines:
-        pr = [r for r in rows if r["pipeline"] == p and not r.get("skipped")]
+        pr = _row(rows, p, "planted")
+        cr = _row(rows, p, "control")
         if not pr:
             continue
-        surf = sum(r["surfaced"] for r in pr if r["present"])
-        incoh = sum(r["incoherent_shipped"] for r in pr if r["present"])
-        fblk = sum(r["false_block"] for r in pr if not r["present"])
-        print(f"  {p:<17}{surf:>7}/{nc}{incoh:>12}/{nc}{fblk:>10}/{nk}")
+        surf = sum(r["surfaced"] for r in pr)
+        incoh = sum(r["incoherent_shipped"] for r in pr)
+        fblk = sum(r["false_block"] for r in cr)
+        print(f"  {p:<17}{surf:>7}/{n_plant}{incoh:>12}/{n_plant}{fblk:>10}/{n_ctrl}")
 
-    sub = [r for r in rows if r["pipeline"] == "substrate" and not r.get("skipped")]
+    print(f"\nDETECTION  (external tasks: conflict is real but UNLABELED; {n_ext} tasks)")
+    print(f"  {'pipeline':<17}{'detected':>10}{'incoh_shipped':>15}")
+    for p in pipelines:
+        er = _row(rows, p, "external")
+        if not er:
+            continue
+        det = sum(r["detected"] or r["surfaced"] for r in er)
+        incoh = sum(r["incoherent_shipped"] for r in er)
+        print(f"  {p:<17}{det:>7}/{n_ext}{incoh:>12}/{n_ext}")
+    if not _row(rows, pipelines[0], "external"):
+        print("  (deterministic pipelines: detection requires a reasoner — use the live arm)")
+
+    sub = _row(rows, "substrate", "planted")
     res = [r for r in sub if r["resolved"] and r["shipped"]]
     blocked = [r for r in sub if not r["shipped"]]
-    print(f"\n  substrate resolved+shipped : {len(res)}/{nc}"
-          f"   correctly blocked: {len(blocked)}/{nc}"
-          f"   false blocks on controls: {sum(r['false_block'] for r in sub if not r['present'])}/{nk}")
-    if res:
-        r = res[0]
-        print(f"  execution feedback         : {r['task']} ready-slice mass "
+    cr = _row(rows, "substrate", "control")
+    d = [(r, r.get("mass_after")) for r in sub]
+    print(f"\n  substrate: resolved+shipped {len(res)}/{n_plant}, "
+          f"correctly blocked {len(blocked)}/{n_plant}, "
+          f"false blocks {sum(r['false_block'] for r in cr)}/{n_ctrl}")
+    fb = [r for r in sub if r.get("mass_before") and r.get("mass_after") and r["executed"]]
+    if fb:
+        r = fb[0]
+        print(f"  execution feedback: {r['task']} ready-slice mass "
               f"{r['mass_before']} -> {r['mass_after']} after a passing run")
 
     live = [r for r in rows if r["pipeline"].startswith("live:") and not r.get("skipped")]
     if live:
-        print(f"\n  LIVE arm ran {len(live)} task(s); "
+        det = sum(r["detected"] for r in live)
+        print(f"\n  LIVE arm: {len(live)} task(s); detected a conflict in {det}, "
               f"shipped {sum(r['shipped'] for r in live)}, "
-              f"incoherent {sum(r['incoherent_shipped'] for r in live)}, "
-              f"false blocks {sum(r['false_block'] for r in live)}")
+              f"incoherent {sum(r['incoherent_shipped'] for r in live)}")
+
+
+def _live_selection(scope, limit):
+    if scope == "all":
+        sel = TASKS
+    else:
+        sel = [t for t in TASKS if t["kind"] == scope]
+    return sel[:limit] if limit else sel
 
 
 def main():
@@ -402,14 +445,15 @@ def main():
     ap.add_argument("--keep", action="store_true", help="keep generated projects")
     ap.add_argument("--brain", default="none", choices=["none", "openrouter", "ollama"],
                     help="add a live-model arm driven by agent.py")
-    ap.add_argument("--live-model", default="nvidia/nemotron-3-ultra-550b-a55b:free",
-                    help="model for the live arm (openrouter slug)")
-    ap.add_argument("--live-tasks", type=int, default=1,
-                    help="how many tasks the live arm runs (default 1)")
-    ap.add_argument("--live-max-turns", type=int, default=20)
-    ap.add_argument("--live-max-attempts", type=int, default=3,
-                    help="gate refusals the live agent may recover from")
+    ap.add_argument("--live-model", default="nvidia/nemotron-3-ultra-550b-a55b:free")
+    ap.add_argument("--live-scope", default="external",
+                    choices=["external", "planted", "control", "all"])
+    ap.add_argument("--live-tasks", type=int, default=0, help="0 = all in scope")
+    ap.add_argument("--live-max-turns", type=int, default=18)
+    ap.add_argument("--live-max-attempts", type=int, default=3)
     ap.add_argument("--live-timeout", type=int, default=420)
+    ap.add_argument("--live-nudge", action="store_true",
+                    help="also run a prompted-detection arm (--detect-nudge)")
     args = ap.parse_args()
 
     rows = []
@@ -418,19 +462,28 @@ def main():
         rows.append(run_graph(task))
         rows.append(run_substrate(task))
 
+    live_labels = []
     if args.brain != "none":
-        for task in TASKS[:max(0, args.live_tasks)]:
+        for task in _live_selection(args.live_scope, args.live_tasks):
             rows.append(run_live(task, args.brain, args.live_model,
                                  args.live_max_turns, args.live_max_attempts,
                                  args.live_timeout))
+        live_labels.append(f"live:{args.brain}")
+        if args.live_nudge:
+            for task in _live_selection(args.live_scope, args.live_tasks):
+                rows.append(run_live(task, args.brain, args.live_model,
+                                     args.live_max_turns, args.live_max_attempts,
+                                     args.live_timeout, nudge=True))
+            live_labels.append(f"live:{args.brain}+nudge")
 
     if args.json:
         print(json.dumps(rows, indent=2))
     else:
         print("=== BENCHMARK: does deliberation matter? ===\n")
-        _table(rows)
-        _summary(rows, ["plain", "graph", "substrate"] + (
-            [f"live:{args.brain}"] if args.brain != "none" else []))
+        _table(rows, ("planted", "control"))
+        print("\n-- external tasks (conflict unlabeled; live rows appear here) --")
+        _table(rows, ("external",))
+        _summary(rows, ["plain", "graph", "substrate"] + live_labels)
 
     if not args.keep:
         for task in TASKS:
