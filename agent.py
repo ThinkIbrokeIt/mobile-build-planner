@@ -482,8 +482,11 @@ def brain_echo(root, seed, turn, mem):
 
     if "tension_done" not in mem and len(ids) >= 4:
         mem["tension_done"] = True
-        if not th["t2"].get("resolved"):
-            return f"contradict t2 t3"
+        # Pick two real, grown thoughts to hold in tension (do NOT assume ids
+        # like t2/t3 exist -- a prior run may have released them).
+        cand = [i for i in ids if i != "t0"]
+        if len(cand) >= 2 and not th[cand[0]].get("resolved"):
+            return f"contradict {cand[0]} {cand[1]}"
         # On resolving, the silence SHARES the insight outward — flips the
         # share bit by writing shared. The choice to share is made here.
         return f"journal write free --share the act IS the never -- one promise a day is the anti-shame"
@@ -530,17 +533,18 @@ def translate(root):
 
 
 def block_reason(out):
-    """Distil forge's refusal into one line for the model."""
+    """Distil forge's refusal for the model, INCLUDING which specific thoughts
+    were left unaccounted (otherwise the feedback is too vague to act on)."""
     keep = []
     for line in out.splitlines():
         s = line.strip()
-        if any(k in s for k in ("[manual", "[auto]", "BLOCKED",
-                                "cannot become flesh", "DESIGN FLAWS")):
+        if any(k in s for k in ("[manual", "[auto]", "[open]", "THREADS LEFT",
+                                "BLOCKED", "cannot become flesh", "DESIGN FLAWS")):
             keep.append(s)
     if not keep:
         lines = [l.strip() for l in out.splitlines() if l.strip()]
         keep = lines[-1:]
-    return " | ".join(keep[-4:]) or "unspecified"
+    return " | ".join(keep[-8:]) or "unspecified"
 
 
 def clear_ready(root):
