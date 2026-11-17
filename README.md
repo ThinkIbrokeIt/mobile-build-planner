@@ -76,6 +76,32 @@ coherent slice (it runs forge and returns the verified artifact). A worked
 quickstart is in [`examples/`](examples/); the launch kit is in
 [`docs/launch/`](docs/launch/).
 
+## An idea may be incomplete — it may not be *silently* incomplete
+You don't have to know exactly what you want, or spell it out fully. An idea
+arrives half-formed, and the agent owns every step from there to something real —
+which thoughts to grow, what to build, how, and when it's ready. We impose none
+of that.
+
+The one rule: **nothing the agent grew may vanish without a decision.** Every
+thought becomes one of three things, and all three are the agent's own choice:
+
+- **incarnated** — it becomes part of the real thing,
+- **held open** — a flagged, unresolved question (fine! an idea can have gaps),
+- **let go** — a conscious, recorded deferral.
+
+The gate refuses to make the idea real while any thought is left *unaccounted* —
+not because incompleteness is wrong, but because you should be able to see it.
+The artifact ships with its own honest ledger, `OPEN_THREADS.md`:
+
+```
+coverage: 3 incarnated · 0 deferred · 1 held open · 0 resolved · 0 set aside
+nothing was silently dropped.
+```
+
+So the thing is always real, and its completeness is always visible — never an
+assertion by a model that's convinced it's done. Try the demo:
+`bash scripts/demo_threads.sh`
+
 ## The idea
 The thing being built is the SILENT PART. Not the scaffold, not the tooling.
 The pre-word thought — how a mind holds a problem before language exists,
@@ -164,8 +190,12 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
   forge.py    Layer 2 translator. `from-substrate <root> --name X` reads the
                agent's READY slice and turns it into WORD->FLESH. It HONORS
                the agent's own relation vocabulary (needs = dep; references =
-               not a dep; etc.) and enforces the gate. Also keeps the older
-               recursive `build` harness for non-agent use.
+               not a dep; etc.) and enforces the gate: it refuses a slice that
+               holds an open contradiction OR leaves a thought unaccounted
+               (neither incarnated, held open, nor released). On success it
+               writes OPEN_THREADS.md beside the artifact — the idea's honest
+               accounting of what became real, what's held open, what was let go.
+               Also keeps the older recursive `build` harness for non-agent use.
 
   mbp.py      The single-layer engine. IDEA->WORD->FLESH with a verify gate.
                Pure Layer 2 now — the output stage.

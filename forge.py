@@ -394,6 +394,60 @@ def cmd_show(root):
     walk("0", 0)
 
 
+def write_open_threads(sub, app_dir, name):
+    """Write OPEN_THREADS.md next to the artifact: what became real, what was
+    consciously let go, what is held open, what tensions were resolved or set
+    aside. This is the idea's honest accounting of itself."""
+    th = sub.get("thoughts", {})
+    ready = sub.get("ready", [])
+    released = sub.get("released", [])
+    seed = sub.get("seed")
+
+    def txt(i):
+        return th.get(i, {}).get("text", "")
+
+    idea = txt(seed) if seed else ""
+    held = [(i, t) for i, t in th.items() if t.get("holds")]
+    resolved = [(i, r) for i, t in th.items() for r in t.get("resolved", [])]
+    dormant = [i for i, t in th.items() if t.get("dormant")]
+
+    L = [f"# Open threads — {name}", "",
+         f"**The idea:** {idea}", "",
+         f"## Incarnated — became real ({len(ready)})"]
+    L += [f"- `{i}` {txt(i)}" for i in ready] or ["- (none)"]
+
+    L += ["", f"## Let go — conscious deferrals ({len(released)})"]
+    L += [f"- `{r['id']}` {r.get('text', '')[:80]} — {r.get('why', '')}"
+          for r in released] or ["- (none) — nothing was consciously dropped"]
+
+    L += ["", f"## Held open — flagged, unresolved ({len(held)})"]
+    if held:
+        for i, t in held:
+            for h in t.get("holds", []):
+                L.append(f"- `{i}` {txt(i)} — open: {h}")
+    else:
+        L.append("- (none) — no unresolved questions left hanging")
+
+    L += ["", "## Tensions resolved"]
+    L += [f"- `{i}` <> `{r['with']}` — {r['how']} (how they reconcile)"
+          for i, r in resolved] or ["- (none)"]
+
+    L += ["", "## Set aside (dormant, honestly not solved)"]
+    L.append("- " + (", ".join(f"`{i}`" for i in dormant) if dormant else "(none)"))
+
+    L += ["", "---",
+          f"coverage: {len(ready)} incarnated · {len(released)} deferred · "
+          f"{len(held)} held open · {len(resolved)} resolved · "
+          f"{len(dormant)} set aside",
+          "nothing was silently dropped."]
+    md = "\n".join(L) + "\n"
+
+    os.makedirs(app_dir, exist_ok=True)
+    with open(os.path.join(app_dir, "OPEN_THREADS.md"), "w") as f:
+        f.write(md)
+    return md
+
+
 def cmd_from_substrate(root, name):
     """LAYER 2 TRANSLATOR. Read the agent's ready slice from the substrate
     and turn it into WORD->FLESH. We do NOT reshape the agent's thoughts:
@@ -412,6 +466,24 @@ def cmd_from_substrate(root, name):
         print("[err] agent hasn't marked a ready slice. (substrate ready <ids>)")
         sys.exit(1)
     thoughts = sub["thoughts"]
+
+    # AN IDEA MAY BE INCOMPLETE. IT MAY NOT BE SILENTLY INCOMPLETE.
+    # Every thought the agent grew must be accounted for: incarnated (ready),
+    # held open (a flagged question), or consciously released. We do not judge
+    # completeness and we do not choose the path -- we only refuse to let a
+    # thread vanish without a decision. (The agent's own steps stay its own.)
+    try:
+        from substrate import unaccounted
+        unacct = unaccounted(sub)
+    except Exception:
+        unacct = []
+    if unacct:
+        print("THREADS LEFT UNACCOUNTED -- an idea may be incomplete, but not silently so:")
+        for tid in unacct:
+            print(f"  [open] {tid}: {thoughts[tid].get('text', '')[:70]}")
+        print("[BLOCKED] for each: include it (ready), `hold` it open, or "
+              "`release` it -- then the idea can become real.")
+        return
 
     # OPEN CONTRADICTIONS ARE FIRST-CLASS: refuse to incarnate a ready slice
     # while it holds an unresolved, non-dormant tension. A dormant tension was
@@ -483,6 +555,11 @@ def cmd_from_substrate(root, name):
             or not os.path.isdir(app_path)):
         print("[BLOCKED] the slice isn't coherent yet. Agent should keep reasoning.")
         return
+
+    # The thing becomes real WITH an honest accounting of itself. The ledger
+    # rides along with the artifact so the idea's openness is visible, not lost.
+    ledger = write_open_threads(sub, app_path, name)
+    print(ledger.split("---")[-1].strip())
 
     print(f"[ok] the agent's reasoning became flesh: {app_path}")
     

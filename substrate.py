@@ -234,6 +234,22 @@ def op_types(root, data):
         print(f"[types] registry unavailable: {e}")
 
 
+def unaccounted(data):
+    """Thoughts the agent created but neither incarnated (in the ready slice),
+    held open, nor released. These are the SILENT omissions.
+
+    The idea may be incomplete. It may not be invisibly incomplete. To account
+    for a thought the agent has three moves, and all of them are its own choice:
+      * include it  -> `ready` (it becomes real),
+      * hold it open -> `hold` (a flagged, unresolved question),
+      * let it go    -> `release` (a conscious, recorded deferral).
+    Anything left over is a thread the idea is quietly missing.
+    """
+    ready = set(data.get("ready", []))
+    return [tid for tid, t in data.get("thoughts", {}).items()
+            if tid not in ready and not t.get("holds")]
+
+
 def op_ready(root, data, ids):
     for i in ids:
         if i not in data["thoughts"]:
