@@ -26,7 +26,7 @@ is coherent enough to ship.
 
 A graph-based scratchpad helps a little — until you measure it. We built the
 graph-only version as an ablation: same thoughts, same links, same contradictions,
-but no gate. It shiped incoherent work **3/3** times, exactly like the plain
+but no gate. It shipped incoherent work **3/3** times, exactly like the plain
 baseline. Structure alone buys nothing.
 
 ## What we built
