@@ -97,6 +97,10 @@ class SalienceConfig:
     relation_resonance: float = 0.4
     kind_resonance: float = 0.5
 
+    # --- execution feedback: how strongly a real run's outcome reshapes mass ---
+    execution_mass_gain: float = 0.3   # success multiplier = 1 + (w-1)*gain
+    execution_fail_floor: float = 0.1  # mass never drops below this on failure
+
     # --- thresholds / dynamics ---
     proximity_report: float = 0.3      # pairs above this are "felt"
     proximity_collapse: float = 0.4    # tension + this => lean to fuse
@@ -244,17 +248,48 @@ def recompute(data, cfg=DEFAULT):
         if holds:
             t["mass"] = 1.0 + cfg.hold_mass_per_note * len(holds)
 
-    # --- execution feedback: adjust mass based on execution success/failure ---
-    exec_weight = data.get("execution_weight")
+    # --- execution feedback: a real run's outcome reshapes the shipped slice ---
+    # Prefer the executions ledger (most recent entry); fall back to the legacy
+    # scalar. Success reinforces mass (the silence validated); failure weakens it
+    # (the agent should reconsider).
+    exec_weight = None
+    entries = data.get("executions")
+    if entries:
+        exec_weight = entries[-1].get("weight")
+    if exec_weight is None:
+        exec_weight = data.get("execution_weight")
     if exec_weight is not None:
         for tid in data.get("ready", []):
             if tid in th:
                 if exec_weight >= 1.0:
-                    th[tid]["mass"] *= (1.0 + (exec_weight - 1.0) * 0.3)
+                    th[tid]["mass"] *= (1.0 + (exec_weight - 1.0) * cfg.execution_mass_gain)
                 else:
-                    th[tid]["mass"] *= exec_weight
+                    th[tid]["mass"] *= max(cfg.execution_fail_floor, exec_weight)
 
     return data
+
+
+def record_execution(data, weight, success=None, duration=None, errors=None, turn=None):
+    """Log a real execution outcome into the substrate (the self-training loop).
+
+    Appends to data['executions'] and mirrors the legacy scalar fields so older
+    readers still work. Returns the recorded entry.
+    """
+    entry = {
+        "turn": turn if turn is not None else len(data.get("trail", [])),
+        "weight": round(float(weight), 3),
+        "success": bool(success) if success is not None else (weight >= 1.0),
+        "duration": duration,
+        "errors": list(errors or []),
+    }
+    data.setdefault("executions", []).append(entry)
+    data["execution_weight"] = entry["weight"]
+    if entry["success"]:
+        data["execution_success"] = True
+        data.pop("execution_failed", None)
+    else:
+        data["execution_failed"] = True
+    return entry
 
 
 def proximity(a_text, b_text):
@@ -624,6 +659,13 @@ def field_summary(data, cfg=DEFAULT):
     the auditable salience ladder, then the leans."""
     pv = pull_vector(data, cfg)
     lines = [f"=== FIELD (salience; config {CONFIG_SIGNATURE[:48]}…) ==="]
+
+    # last real execution outcome (the self-training signal)
+    ex = data.get("executions") or []
+    if ex:
+        e = ex[-1]
+        lines.append(f"  last execution: weight={e['weight']} success={e['success']} "
+                     f"(turn {e['turn']}) — mass reshaped via execution_mass_gain")
 
     # contradictions — first-class
     active = pv["open_tensions"]

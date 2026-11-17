@@ -502,20 +502,22 @@ def cmd_from_substrate(root, name):
                 weight = execution_to_physics_weight(exec_result)
                 print(f"  [physics] execution weight: {weight:.2f}")
                 
-                # Feed back to substrate if possible
+                # Feed the outcome back into the substrate (self-training loop):
+                # log it, then physics.recompute reshapes the shipped slice's mass.
+                try:
+                    from physics import record_execution
+                    record_execution(sub, weight,
+                                     success=exec_result.get("success"),
+                                     duration=exec_result.get("duration"),
+                                     errors=exec_result.get("errors"))
+                except Exception:
+                    sub["execution_weight"] = weight
                 if weight < 1.0:
-                    print(f"  [feedback] execution failed/poor - agent should reconsider")
-                    # Mark the ready slice as needing revision
-                    sub["execution_failed"] = True
-                    sub["execution_weight"] = weight
-                    with open(sp, "w") as f:
-                        yaml.safe_dump(sub, f, sort_keys=False)
+                    print("  [feedback] execution failed/poor - agent should reconsider")
                 else:
-                    print(f"  [feedback] execution successful - silence validated")
-                    sub["execution_success"] = True
-                    sub["execution_weight"] = weight
-                    with open(sp, "w") as f:
-                        yaml.safe_dump(sub, f, sort_keys=False)
+                    print("  [feedback] execution successful - silence validated")
+                with open(sp, "w") as f:
+                    yaml.safe_dump(sub, f, sort_keys=False)
         except Exception as e:
             print(f"  [sandbox error] {e}")
     else:

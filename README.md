@@ -141,6 +141,37 @@ The map (the agent's reasoning) is the source of truth. mbp verify traces
 every incarnated file back to a thought. If a slice is circular or incoherent,
 the substrate refuses to flesh it — the silence corrects itself before the word.
 
+## Is it useful? A benchmark
+`bench.py` tests the one narrow, falsifiable claim: a plain schema agent emits
+structured output but does not hold or surface CONFLICTS between requirements,
+while the substrate does. Each task plants one requirement contradiction and is
+run through both a plain pipeline (requirements -> structured output -> ship)
+and the same output routed through the silent layer.
+
+  python3 bench.py          # table
+  python3 bench.py --json   # machine-readable
+
+```
+task              pipeline    present surfaced incoh_ship shipped verify  exec  ops
+habit-tracker     plain             1        0          1       1      1     1    3
+habit-tracker     substrate         1        1          0       1      1     1   10
+offline-sync      plain             1        0          1       1      1     1    3
+offline-sync      substrate         1        1          0       0      0     0    9
+auth-permissions  plain             1        0          1       1      1     1    3
+auth-permissions  substrate         1        1          0       1      1     1   10
+```
+
+Result: the plain pipeline surfaced **0/3** contradictions and shipped an
+incoherent artifact **3/3** times (and it *verifies* and *runs* — structural
+checks miss semantic incoherence). The substrate surfaced **3/3**, shipped an
+incoherent artifact **0/3**, and blocked the one contradiction with no honest
+resolution. Cost is deliberation steps (10 vs 3), which is the trade.
+
+Execution feedback closes the loop: a passing run is logged in the substrate's
+`executions` ledger and, via `execution_mass_gain`, reshapes the shipped
+slice's mass (e.g. `1.0 -> 1.3` after a weight-2.0 run), so the field learns
+from what actually ran.
+
 ## MCP — the framing, implemented
 The README once said MCP was an ANALOGY. It is now real: `mcp_server.py` is a
 dependency-free MCP server (JSON-RPC 2.0 over stdio) that exposes the substrate
