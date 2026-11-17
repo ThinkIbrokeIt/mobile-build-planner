@@ -9,6 +9,43 @@ normal output schema. It speaks **MCP**, so any tool-calling host can drive it.
 > Most agents execute and remember. They have no place to hold a conflict.
 > This is that place.
 
+<p align="center">
+  <img src="docs/demo.svg" alt="A conflicting design is held, surfaced, and refused by the gate, then resolved and shipped." width="820">
+</p>
+
+*The demo, live (`asciinema play docs/demo.cast`; re-record with
+`python3 scripts/record_demo.py`).*
+
+<details><summary>Demo transcript (abridged)</summary>
+
+```
+▸ 1  an agent reasons: gamify the tracker, but never shame the user
+$ python3 substrate.py gate-demo contradict t1 t2
+[tension] t1 <> t2  (held, not resolved)
+
+▸ 2  the field sees the conflict (a first-class object, not a vibe)
+=== FIELD (salience; ...) ===
+  OPEN CONTRADICTIONS (unresolved — these block incarnation):
+    t1 <> t2  ripen=0  prox=0.0
+    t2  1.85  [conflict 1.00  ref 0.00  recency 0.55  prox 1.00  mass 0.30]
+
+▸ 3  the agent marks it READY — and the gate refuses to ship it
+[BLOCKED] the slice holds an open contradiction. Resolve it (substrate resolve)
+or let it go dormant first.
+
+▸ 4  resolve it honestly, then commit
+[ok] THE WORD HAS BECOME FLESH.
+  Success: True          # the artifact ran
+
+▸ 5  and it is measured, not asserted
+SUMMARY  (3 contradiction tasks, 2 coherent controls)
+  pipeline           surfaced  incoh_shipped  false_block
+  plain                  0/3           3/3         0/2
+  graph                  0/3           3/3         0/2
+  substrate              3/3           0/3         0/2
+```
+</details>
+
 ## See it in 15 seconds
 ```
 python3 mcp_server.py --selftest    # drives the MCP tools end to end, no host needed
