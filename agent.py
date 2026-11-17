@@ -35,6 +35,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import os
 import re
 import subprocess
@@ -142,7 +143,7 @@ def _load_openrouter_key():
     return ""
 
 
-def brain_openrouter(model, root, seed, turn):
+def brain_openrouter(model, root, seed, turn, correction=""):
     import urllib.request, json
     key = _load_openrouter_key()
     if not key:
@@ -183,7 +184,7 @@ def brain_openrouter(model, root, seed, turn):
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
-{hermes_section}
+{hermes_section}{correction_block(correction)}
 
 Choose ONE operation. Reply ONLY as JSON:
 {{"op": "branch|link|unlink|hold|name|contradict|resolve|collapse|ready|done", "args": "<rest of the line>"}}
@@ -255,7 +256,7 @@ rich, emit ready with the ids worth building. Output ONE JSON object only."""
     except Exception as e:
         last_err = str(e)
     return f"__ERROR__ {last_err}"
-def brain_ollama(model, root, seed, turn):
+def brain_ollama(model, root, seed, turn, correction=""):
     import urllib.request, json
     ctx = trail_text(root)
     try:
@@ -290,7 +291,7 @@ SEED: {seed}
 Current thought-space (your own reasoning so far):
 {ctx}
 {field}
-{hermes_section}
+{hermes_section}{correction_block(correction)}
 
 Think by issuing ONE operation. Choose from:
   branch <from> <text>     grow a new thought from an existing id
@@ -506,6 +507,57 @@ def brain_echo(root, seed, turn, mem):
 # The loop
 # ---------------------------------------------------------------------------
 
+def correction_block(correction):
+    """Prompt fragment fed back to a model brain when the gate refused a slice."""
+    if not correction:
+        return ""
+    return ("\n\nGATE FEEDBACK — forge REFUSED your last READY slice:\n  "
+            + correction +
+            "\nFix it before marking READY again: include every dependency "
+            "INSIDE the ready slice, and resolve or release any open "
+            "contradiction.")
+
+
+def translate(root):
+    """Run Layer 2. Returns (ok, output). ok only when an app actually exists."""
+    r = subprocess.run([sys.executable, FORGE, "from-substrate", root,
+                        "--name", f"{root}__incarnated"],
+                       cwd=HERE, capture_output=True, text=True)
+    app = os.path.join(PROJECTS, f"{root}__incarnated", "app")
+    ok = r.returncode == 0 and "BLOCKED" not in r.stdout and os.path.isdir(app)
+    return ok, r.stdout
+
+
+def block_reason(out):
+    """Distil forge's refusal into one line for the model."""
+    keep = []
+    for line in out.splitlines():
+        s = line.strip()
+        if any(k in s for k in ("[manual", "[auto]", "BLOCKED",
+                                "cannot become flesh", "DESIGN FLAWS")):
+            keep.append(s)
+    if not keep:
+        lines = [l.strip() for l in out.splitlines() if l.strip()]
+        keep = lines[-1:]
+    return " | ".join(keep[-4:]) or "unspecified"
+
+
+def clear_ready(root):
+    """The gate refused the agent's ready slice: un-mark it so the agent must
+    re-mark a corrected slice, and remember the refusal in the trail."""
+    d = load_sub(root)
+    if not d or not d.get("ready"):
+        return []
+    ids = d["ready"]
+    d["ready"] = []
+    d.setdefault("trail", []).append({
+        "t": datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+        "act": "gate-refused", "detail": ", ".join(ids)})
+    with open(sub_path(root), "w") as f:
+        yaml.safe_dump(d, f, sort_keys=False)
+    return ids
+
+
 def main():
     p = argparse.ArgumentParser(prog="agent",
         description="The silent loop: agent drives the substrate autonomously.")
@@ -515,6 +567,9 @@ def main():
                    choices=["ollama", "echo", "openrouter"])
     p.add_argument("--model", default="nvidia/nemotron-3-ultra-550b-a55b:free")
     p.add_argument("--max-turns", type=int, default=40)
+    p.add_argument("--max-attempts", type=int, default=3,
+                   help="how many times the gate may REFUSE a ready slice before "
+                        "the loop stops; each refusal is fed back to the brain")
     args = p.parse_args()
 
     # plant the seed (idempotent-ish: only if no substrate yet)
@@ -525,15 +580,17 @@ def main():
 
     print(f"\n=== SILENT LOOP ({args.root}) | brain={args.brain} | model={args.model} ===\n")
     mem = {}
+    attempt = 0      # times forge has refused a ready slice
+    correction = ""  # gate feedback fed back to a model brain
     for turn in range(1, args.max_turns + 1):
         if args.brain == "ollama":
-            op = brain_ollama(args.model, args.root, args.seed, turn)
+            op = brain_ollama(args.model, args.root, args.seed, turn, correction)
             if op.startswith("__ERROR__"):
                 print(f"[brain] ollama unavailable ({op}); switching to echo.")
                 args.brain = "echo"
                 op = brain_echo(args.root, args.seed, turn, mem)
         elif args.brain == "openrouter":
-            op = brain_openrouter(args.model, args.root, args.seed, turn)
+            op = brain_openrouter(args.model, args.root, args.seed, turn, correction)
             if op.startswith("__ERROR__"):
                 print(f"[brain] openrouter failed ({op}); switching to echo.")
                 args.brain = "echo"
@@ -550,7 +607,25 @@ def main():
         if op.startswith("ready"):
             ids = op.split()[1:]
             print(run_sub(args.root, "ready", *ids))
-            break
+            # Layer 2 gate runs now. A refusal is NOT the end: the reason is fed
+            # back and the agent keeps reasoning within the same turn budget, so
+            # a real model can iterate to a shippable slice.
+            ok, out = translate(args.root)
+            print(out)
+            if ok:
+                print(f"[ok] the silence became flesh: projects/{args.root}__incarnated/app")
+                return
+            attempt += 1
+            if attempt >= args.max_attempts:
+                print(f"\n[loop] gate refused the ready slice {attempt} time(s); stopping. "
+                      "Raise --max-attempts/--max-turns or fix the slice by hand.")
+                return
+            refused = clear_ready(args.root)
+            correction = block_reason(out)
+            print(f"[loop] gate refused slice ({', '.join(refused)}); reason: {correction}")
+            print(f"[loop] un-marked it; continuing to reason (attempt "
+                  f"{attempt + 1}/{args.max_attempts}).")
+            continue
 
         # dispatch the operation to the substrate
         parts = op.split(None, 1)
@@ -644,18 +719,10 @@ def main():
         except Exception:
             pass
 
-    # after the loop, translate if a ready slice exists
+    # the turn budget ran out without a successful incarnation
     d = load_sub(args.root)
     if d and d.get("ready"):
-        print(f"\n=== TRANSLATE: agent's reasoning -> WORD/FLESH ===")
-        r = subprocess.run([sys.executable, FORGE, "from-substrate",
-                            args.root, "--name", f"{args.root}__incarnated"],
-                           cwd=HERE, capture_output=True, text=True)
-        print(r.stdout)
-        if r.returncode == 0 and "BLOCKED" not in r.stdout:
-            print(f"[ok] the silence became flesh: projects/{args.root}__incarnated/app")
-        else:
-            print("[loop] slice blocked; agent should keep reasoning (re-run).")
+        print("\n[loop] a ready slice remains but was not incarnated.")
     else:
         print("\n[loop] no ready slice; the silence stays silent.")
 

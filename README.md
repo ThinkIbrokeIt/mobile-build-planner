@@ -80,7 +80,11 @@ as art under the name [Noema](https://github.com/ThinkIbrokeIt/noema).
                                      facets when the field is silent.
                Each turn the loop runs drift() (self-correction from within)
                and prints the field so the gravity is visible. When it says
-               READY, the loop calls forge to translate.
+               READY, the loop calls forge to translate. If the gate REFUSES
+               (open contradiction, or a dependency outside the slice), the
+               loop feeds the reason back to the brain, un-marks the slice, and
+               keeps reasoning — up to --max-attempts — so a model can iterate
+               to a shippable slice instead of dead-ending.
 
   forge.py    Layer 2 translator. `from-substrate <root> --name X` reads the
                agent's READY slice and turns it into WORD->FLESH. It HONORS
@@ -190,9 +194,11 @@ slice's mass (e.g. `1.0 -> 1.3` after a weight-2.0 run), so the field learns
 from what actually ran.
 
 The live arm (`--brain openrouter`) drives `agent.py` with a real model. It is
-best-effort — free-tier models are rate-limited — and it also demonstrates the
-gate against a non-scripted reasoner: one live run reached READY with a slice
-whose dependencies fell outside it, and `forge` refused to incarnate it.
+best-effort — free-tier models are rate-limited. It also demonstrates the gate
+against a non-scripted reasoner: one live run reached READY with a slice whose
+dependencies fell outside it and `forge` refused it; with auto-resume
+(`--max-attempts`) the loop hands the reason back to the model to re-mark a
+corrected slice.
 
 ## MCP — the framing, implemented
 The README once said MCP was an ANALOGY. It is now real: `mcp_server.py` is a

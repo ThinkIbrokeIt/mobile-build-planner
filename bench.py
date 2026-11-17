@@ -313,7 +313,7 @@ def run_substrate(task):
 # Pipeline: live model arm (opt-in)
 # ---------------------------------------------------------------------------
 
-def run_live(task, brain, model, max_turns, timeout):
+def run_live(task, brain, model, max_turns, max_attempts, timeout):
     root = f"bench_live_{task['name']}"
     shutil.rmtree(os.path.join(S.PROJECTS, root), ignore_errors=True)
     shutil.rmtree(os.path.join(S.PROJECTS, root + "__incarnated"), ignore_errors=True)
@@ -321,7 +321,8 @@ def run_live(task, brain, model, max_turns, timeout):
     try:
         r = subprocess.run(
             [sys.executable, "agent.py", root, "--seed", task["seed"],
-             "--brain", brain, "--model", model, "--max-turns", str(max_turns)],
+             "--brain", brain, "--model", model, "--max-turns", str(max_turns),
+             "--max-attempts", str(max_attempts)],
             cwd=HERE, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         row["skipped"] = True
@@ -405,8 +406,10 @@ def main():
                     help="model for the live arm (openrouter slug)")
     ap.add_argument("--live-tasks", type=int, default=1,
                     help="how many tasks the live arm runs (default 1)")
-    ap.add_argument("--live-max-turns", type=int, default=10)
-    ap.add_argument("--live-timeout", type=int, default=300)
+    ap.add_argument("--live-max-turns", type=int, default=20)
+    ap.add_argument("--live-max-attempts", type=int, default=3,
+                    help="gate refusals the live agent may recover from")
+    ap.add_argument("--live-timeout", type=int, default=420)
     args = ap.parse_args()
 
     rows = []
@@ -418,7 +421,8 @@ def main():
     if args.brain != "none":
         for task in TASKS[:max(0, args.live_tasks)]:
             rows.append(run_live(task, args.brain, args.live_model,
-                                 args.live_max_turns, args.live_timeout))
+                                 args.live_max_turns, args.live_max_attempts,
+                                 args.live_timeout))
 
     if args.json:
         print(json.dumps(rows, indent=2))
