@@ -52,7 +52,7 @@ class HermesParser:
         # Token overlap-based similarity search for felt proximity
 ```
 
-**Implemented in**: `hermes.py`
+**Implemented in**: `Echo_x.py`
 
 ### Layer 2: Weight Engine (Silence Decides)
 The physics engine influences retrieval weights:
@@ -69,7 +69,7 @@ def weight_by_field(hermes_results, field_data):
     # Re-sort by field-weighted score
 ```
 
-**Implemented in**: `hermes.py`
+**Implemented in**: `Echo_x.py`
 
 ### Layer 3: Echo Brain Augmentation
 The echo brain now consults Hermes after turn 3 (once thought has developed):

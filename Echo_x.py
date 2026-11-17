@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-hermes.py — weighted knowledge layer from conversation history.
+Echo_x.py — weighted knowledge layer from conversation history.
 =============================================================
 
 Stream-based parser for the hermes_dataset.json backup. The silence (physics

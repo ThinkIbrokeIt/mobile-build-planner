@@ -158,7 +158,7 @@ def brain_openrouter(model, root, seed, turn):
     hermes_section = ""
     if HERMES_AVAILABLE and turn > 3:
         try:
-            from hermes import get_parser, weight_by_field, format_for_brain
+            from Echo_x import get_parser, weight_by_field, format_for_brain
             parser = get_parser(HERMES_PATH)
             d = load_sub(root) or {"thoughts": {}}
             th = d.get("thoughts", {})
@@ -268,7 +268,7 @@ def brain_ollama(model, root, seed, turn):
     hermes_section = ""
     if HERMES_AVAILABLE and turn > 3:
         try:
-            from hermes import get_parser, weight_by_field, format_for_brain
+            from Echo_x import get_parser, weight_by_field, format_for_brain
             parser = get_parser(HERMES_PATH)
             d = load_sub(root) or {"thoughts": {}}
             th = d.get("thoughts", {})
@@ -381,7 +381,7 @@ def brain_echo(root, seed, turn, mem):
     hermes_context = None
     if HERMES_AVAILABLE and turn > 3:  # Only after some thought has developed
         try:
-            from hermes import get_parser, weight_by_field, format_for_brain
+            from Echo_x import get_parser, weight_by_field, format_for_brain
             parser = get_parser(HERMES_PATH)
             
             # Extract keywords from current thoughts for context search
